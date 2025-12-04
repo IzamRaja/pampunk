@@ -111,15 +111,15 @@ const LoginView = ({ onLogin }: { onLogin: () => void }) => {
     return (
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
-                <h2 className="text-xl font-bold text-center mb-4 text-primary">Login Admin</h2>
+                <h2 className="text-xl font-bold text-center mb-4 text-primary">Login</h2>
                 <form onSubmit={handleLogin}>
                     <div className="input-group">
                         <label>Username</label>
-                        <input className="input-field" type="text" value={u} onChange={e => setU(e.target.value)} placeholder="Masukkan username" />
+                        <input className="input-field" style={{color: '#000'}} type="text" value={u} onChange={e => setU(e.target.value)} placeholder="Masukkan username" />
                     </div>
                     <div className="input-group">
                         <label>Password</label>
-                        <input className="input-field" type="password" value={p} onChange={e => setP(e.target.value)} placeholder="Masukkan password" />
+                        <input className="input-field" style={{color: '#000'}} type="password" value={p} onChange={e => setP(e.target.value)} placeholder="Masukkan password" />
                     </div>
                     {err && <div className="text-red-600 text-sm text-center mb-3">{err}</div>}
                     <button type="submit" className="btn">Masuk</button>
@@ -137,21 +137,6 @@ const App = () => {
   const [billFilter, setBillFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [selectedCustomerForRecording, setSelectedCustomerForRecording] = useState<Customer | null>(null);
   
-  // Install Prompt State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  
-  // Initialize isStandalone synchronously to prevent flickering
-  const [isStandalone, setIsStandalone] = useState(() => {
-    if (typeof window !== 'undefined') {
-        const isStandaloneQuery = window.matchMedia('(display-mode: standalone)').matches;
-        const isIOSStandalone = (window.navigator as any).standalone === true;
-        return isStandaloneQuery || isIOSStandalone;
-    }
-    return false;
-  });
-  
-  const [showInstallHelp, setShowInstallHelp] = useState(false);
-
   // --- FIREBASE DATA STATE ---
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -189,53 +174,6 @@ const App = () => {
         unsubTrans();
     };
   }, []);
-
-  // Capture install prompt & Check Standalone
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      console.log("Install prompt captured");
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
-    
-    // Check if app is running in standalone mode (PWA installed)
-    const checkStandalone = () => {
-        const isStandaloneQuery = window.matchMedia('(display-mode: standalone)').matches;
-        const isIOSStandalone = (window.navigator as any).standalone === true;
-        setIsStandalone(isStandaloneQuery || isIOSStandalone);
-    };
-    
-    // Check again on resize/load just in case
-    checkStandalone();
-    window.addEventListener('resize', checkStandalone);
-
-    window.addEventListener('appinstalled', () => {
-        setDeferredPrompt(null);
-        setIsStandalone(true);
-        console.log('App installed');
-    });
-
-    return () => {
-        window.removeEventListener('beforeinstallprompt', handler);
-        window.removeEventListener('resize', checkStandalone);
-    };
-  }, []);
-
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult: any) => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        }
-        setDeferredPrompt(null);
-      });
-    } else {
-        setShowInstallHelp(true);
-    }
-  };
 
   const totalBillIncome = bills.filter(b => b.isPaid).reduce((acc, b) => acc + b.amount, 0);
   const totalManualIncome = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
@@ -286,17 +224,6 @@ const App = () => {
           <MenuCard title="Belum Bayar" value={unpaidCount} subtext="Orang" icon="warning" color="#EF4444" onClick={() => { setBillFilter('unpaid'); setView('bills'); }} />
           <MenuCard title="Kas" value={formatCurrency(lifetimeBalance)} subtext="Saldo Akhir" icon="account_balance_wallet" color="#6366F1" onClick={null} />
           <MenuCard title="Buku Kas" value="Laporan" subtext="Lihat Detail" icon="assessment" color="#F59E0B" onClick={() => setView('cashbook')} />
-          
-          {!isStandalone && (
-             <MenuCard 
-                title="Aplikasi" 
-                value="Install" 
-                subtext="Android / iOS" 
-                icon="download_for_offline" 
-                color="#2196F3" 
-                onClick={handleInstallClick} 
-             />
-          )}
         </div>
       </div>
     );
@@ -487,7 +414,7 @@ const App = () => {
                 if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
                 else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber; 
                 
-                let message = `*TAGIHAN PAMSIMAS PUNGKURAN*\n\nYth. ${customer.name}\nPeriode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\nTipe: ${customer.type}\n\n?? *Detail Meter:*\nMeteran Lama : ${padMeter(prevReading)}\nMeteran Baru : ${padMeter(currReadingNum)}\n*Penggunaan Air : ${usage} m≥*\n\n?? *Rincian Tagihan:*\nBiaya Beban : ${formatCurrency(BIAYA_BEBAN)}\nBiaya Pakai : ${formatCurrency(biayaPakai)}\n(${usage}m≥ x ${formatCurrency(tarifPerM3)})\n`;
+                let message = `*TAGIHAN PAMSIMAS PUNGKURAN*\n\nYth. ${customer.name}\nPeriode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\nTipe: ${customer.type}\n\nüìä *Detail Meter:*\nMeteran Lama : ${padMeter(prevReading)}\nMeteran Baru : ${padMeter(currReadingNum)}\n*Penggunaan Air : ${usage} m¬≥*\n\nüí∞ *Rincian Tagihan:*\nBiaya Beban : ${formatCurrency(BIAYA_BEBAN)}\nBiaya Pakai : ${formatCurrency(biayaPakai)}\n(${usage}m¬≥ x ${formatCurrency(tarifPerM3)})\n`;
                 if(dendaAmount > 0) message += `Denda Keterlambatan : ${formatCurrency(dendaAmount)}\n`;
                 
                 if(arrearsTotal > 0) {
@@ -535,13 +462,13 @@ const App = () => {
                     <input type="text" inputMode="numeric" className="w-full p-2 border border-primary rounded text-right font-bold text-lg outline-none focus:ring-2 ring-blue-300 bg-white" value={currentReading} onChange={(e) => handleMeterInputChange(e.target.value, setCurrentReading)} onBlur={() => setCurrentReading(padMeter(currentReading))} placeholder="00000" autoFocus />
                 </div>
                 <div className="mb-6">
-                    <label className="block text-sm text-secondary mb-1">Penggunaan Air (m≥)</label>
+                    <label className="block text-sm text-secondary mb-1">Penggunaan Air (m¬≥)</label>
                     <div className="w-full p-2 bg-blue-50 rounded text-right font-bold text-primary border border-blue-200 text-lg">{usage}</div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded border border-dashed border-gray-300 mb-6">
                     <div className="text-xs font-bold text-secondary uppercase mb-3 tracking-wider">Rincian Tagihan</div>
                     <div className="flex justify-between text-sm mb-2"><span className="text-gray-600">Biaya Beban</span><span className="font-medium">{formatCurrency(BIAYA_BEBAN)}</span></div>
-                    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-gray-200"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m≥ x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
+                    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-gray-200"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m¬≥ x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
                     {dendaAmount > 0 && <div className="flex justify-between text-sm mb-3 text-red-600"><span>Denda (&gt; tgl {TANGGAL_DENDA})</span><span className="font-medium">{formatCurrency(dendaAmount)}</span></div>}
                     
                     {arrearsTotal > 0 && (
@@ -553,7 +480,7 @@ const App = () => {
 
                     <div className="flex justify-between items-center mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
                 </div>
-                {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">?? Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
+                {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">‚ö†Ô∏è Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
                 <div className="flex flex-col gap-3">
                      <button onClick={() => handleSave(hasPhone)} disabled={!isValid || isSaving} className={`btn ${!isValid ? 'opacity-50 cursor-not-allowed' : ''}`} style={{backgroundColor: '#10B981'}}>
                         <span className="material-icons-round">{isSaving ? 'hourglass_empty' : (hasPhone ? 'send' : 'save')}</span>
@@ -728,7 +655,7 @@ const App = () => {
                     <div key={t.id} className="card p-3 mb-0 flex justify-between items-center">
                         <div>
                             <div className="font-bold text-sm text-primary capitalize">{t.description}</div>
-                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ï {t.isManual ? 'Manual' : 'Otomatis'}</div>
+                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ‚Ä¢ {t.isManual ? 'Manual' : 'Otomatis'}</div>
                         </div>
                         <div className={`font-bold text-right ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
                             {t.type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
@@ -806,17 +733,6 @@ const App = () => {
                     <span className="material-icons-round" style={{ fontSize: '1.5rem' }}>arrow_back</span>
                 </button>
             ) : <div />}
-            
-            {/* Install Icon in Header (Only if not standalone) */}
-            {!isStandalone && (
-                <button 
-                    onClick={handleInstallClick}
-                    className="bg-transparent border-0 p-0 text-white cursor-pointer opacity-90 hover:opacity-100"
-                    title="Install Aplikasi"
-                >
-                    <span className="material-icons-round" style={{ fontSize: '1.5rem' }}>download</span>
-                </button>
-            )}
         </div>
         
         <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-6">PAMSIMAS PUNGKURAN</h1>
@@ -835,45 +751,6 @@ const App = () => {
       </main>
 
       <footer className="app-footer">copyright admin.pampunk 2026</footer>
-      
-      {deferredPrompt && (
-        <button onClick={handleInstallClick} className="install-fab" title="Install Aplikasi">
-            <span className="material-icons-round">download</span> Install Aplikasi
-        </button>
-      )}
-
-      {/* Modal Petunjuk Install Manual */}
-      {showInstallHelp && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-6" onClick={() => setShowInstallHelp(false)}>
-            <div className="card w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold m-0">Install Aplikasi</h3>
-                    <button onClick={() => setShowInstallHelp(false)} className="bg-transparent border-0 p-0 text-gray-500"><span className="material-icons-round">close</span></button>
-                </div>
-                <div className="text-sm text-gray-600 mb-4 leading-relaxed">
-                    Agar aplikasi ini berjalan layar penuh dan offline seperti aplikasi Android/iOS, silakan install secara manual:
-                </div>
-                
-                <div className="bg-gray-50 p-3 rounded mb-3 border border-gray-200">
-                    <div className="font-bold text-gray-800 mb-1 flex items-center gap-2"><span className="material-icons-round text-sm">android</span> Android (Chrome)</div>
-                    <ol className="text-sm text-gray-600 pl-4 m-0 space-y-1">
-                        <li>Ketuk ikon titik tiga <strong>(?)</strong> di pojok kanan atas browser.</li>
-                        <li>Pilih <strong>"Install App"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.</li>
-                    </ol>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded mb-4 border border-gray-200">
-                    <div className="font-bold text-gray-800 mb-1 flex items-center gap-2"><span className="material-icons-round text-sm">ios</span> iOS (Safari)</div>
-                    <ol className="text-sm text-gray-600 pl-4 m-0 space-y-1">
-                        <li>Ketuk tombol <strong>Share</strong> (kotak dengan panah ke atas).</li>
-                        <li>Geser ke bawah dan pilih <strong>"Add to Home Screen"</strong>.</li>
-                    </ol>
-                </div>
-                
-                <button onClick={() => setShowInstallHelp(false)} className="btn">Saya Mengerti</button>
-            </div>
-        </div>
-      )}
     </>
   );
 };
