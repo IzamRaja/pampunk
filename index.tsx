@@ -126,15 +126,18 @@ const LoginView = ({ onLogin, installPrompt, onInstall }: { onLogin: () => void,
                     <button type="submit" className="btn mb-4">Masuk</button>
                     
                     {installPrompt && (
-                        <button 
-                            type="button" 
-                            onClick={onInstall} 
-                            className="btn btn-secondary"
-                            style={{borderColor: '#0288D1', color: '#0288D1'}}
-                        >
-                            <span className="material-icons-round">download</span>
-                            Install Aplikasi
-                        </button>
+                        <div className="text-center pt-4 border-t border-gray-200">
+                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia</div>
+                             <button 
+                                type="button" 
+                                onClick={onInstall} 
+                                className="btn btn-secondary w-full"
+                                style={{borderColor: '#0288D1', color: '#0288D1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}
+                            >
+                                <span className="material-icons-round">install_mobile</span>
+                                Install Aplikasi
+                            </button>
+                        </div>
                     )}
                 </form>
             </div>
@@ -149,7 +152,10 @@ const App = () => {
   const [view, setView] = useState<'dashboard' | 'customers' | 'recording' | 'bills' | 'cashbook'>('dashboard');
   const [billFilter, setBillFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [selectedCustomerForRecording, setSelectedCustomerForRecording] = useState<Customer | null>(null);
+  
+  // PWA State
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   
   // --- FIREBASE DATA STATE ---
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -159,6 +165,11 @@ const App = () => {
 
   // --- PWA INSTALL HANDLER ---
   useEffect(() => {
+    // Cek apakah sudah berjalan dalam mode aplikasi
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+        setIsAppInstalled(true);
+    }
+
     const handler = (e: any) => {
         // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
@@ -177,7 +188,7 @@ const App = () => {
     installPrompt.userChoice.then((choiceResult: any) => {
         if (choiceResult.outcome === 'accepted') {
             console.log('User accepted the install prompt');
-            setInstallPrompt(null); // Hide button after install
+            setInstallPrompt(null);
         } else {
             console.log('User dismissed the install prompt');
         }
@@ -220,16 +231,6 @@ const App = () => {
   const totalManualIncome = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
   const totalManualExpense = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
   const lifetimeBalance = (totalBillIncome + totalManualIncome) - totalManualExpense;
-
-  const BackToDashboard = () => (
-    <button 
-        onClick={() => setView('dashboard')} 
-        className="flex items-center cursor-pointer border-0 p-0 hover:opacity-80 transition-opacity bg-transparent"
-        style={{ color: '#29B6F6', fontSize: '0.85rem', fontWeight: '500', border: 'none', whiteSpace: 'nowrap' }}
-    >
-        Kembali ke Dashboard
-    </button>
-  );
 
   const DashboardView = () => {
     const currentMonth = getCurrentMonth();
@@ -329,7 +330,6 @@ const App = () => {
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold m-0">{editingId ? 'Edit Data Pelanggan' : 'Pelanggan Baru'}</h2>
-                    <BackToDashboard />
                 </div>
                 <div className="card">
                     <div className="input-group">
@@ -366,7 +366,6 @@ const App = () => {
       <div className="relative h-full">
         <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold m-0">Data Pelanggan ({customers.length})</h2>
-            <BackToDashboard />
         </div>
         <div className="mb-4">
              <input className="input-field" placeholder="Cari nama atau alamat..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
@@ -497,7 +496,6 @@ const App = () => {
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">Catat Meter & Tagihan</h2>
-                <BackToDashboard />
             </div>
             <div className="card bg-blue-50 border-blue-200 mb-4">
                 <div className="flex justify-between items-start mb-1">
@@ -622,7 +620,6 @@ const App = () => {
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">{title}</h2>
-                <BackToDashboard />
             </div>
             {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Belum ada data.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
@@ -726,7 +723,6 @@ const App = () => {
           <div className="relative h-full">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">Buku Kas</h2>
-                <BackToDashboard />
             </div>
 
             <div className="mb-4">
@@ -841,7 +837,7 @@ const App = () => {
 
   return (
     <>
-      <header className="app-header" style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem'}}>
+      <header className="app-header" onClick={() => setView('dashboard')} style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem', cursor: 'pointer'}}>
         <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-2">PAMSIMAS PUNGKURAN</h1>
         <div className="flex flex-col justify-center items-center leading-none">
             <div className="text-sm opacity-90 font-medium">PUNGKURAN KWANGSAN JUMAPOLO</div>
@@ -860,12 +856,12 @@ const App = () => {
       <footer className="app-footer">copyright admin.pampunk 2026</footer>
       
       {/* Tombol Floating Install khusus di Dashboard jika belum diinstall */}
-      {installPrompt && isLoggedIn && (
+      {installPrompt && isLoggedIn && !isAppInstalled && (
           <button 
               onClick={handleInstallClick}
               className="install-fab"
           >
-              <span className="material-icons-round">download</span>
+              <span className="material-icons-round">install_mobile</span>
               Install Aplikasi
           </button>
       )}
