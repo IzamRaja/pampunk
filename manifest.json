@@ -1,7 +1,7 @@
 {
   "name": "Pamsimas Pungkuran",
   "short_name": "Pamsimas",
-  "id": "pamsimas-pungkuran-v2-online",
+  "id": "pamsimas-pungkuran-app-v3",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -12,16 +12,30 @@
   "categories": ["finance", "utilities", "productivity"],
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/barudin/pamsimas/refs/heads/main/logo.png",
+      "src": "./logo.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "https://raw.githubusercontent.com/barudin/pamsimas/refs/heads/main/logo.png",
+      "src": "./logo.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+        "src": "./logo.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "form_factor": "wide"
+    },
+    {
+        "src": "./logo.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "form_factor": "narrow"
     }
   ]
 }
