@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pamsimas Pungkuran</title>
+    
+    <!-- PWA Theme & Mobile Config -->
+    <meta name="theme-color" content="#0288D1">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Pamsimas">
+    
+    <!-- PWA Config -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/barudin/pamsimas/refs/heads/main/logo.png">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/barudin/pamsimas/refs/heads/main/logo.png">
+    
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+
+    <!-- React & ReactDOM (CDN - Optional fallback/dev) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel (untuk membaca kode JSX di browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #0288D1;
+            --primary-dark: #01579B;
+            --accent: #00BCD4;
+            --bg-light: #F5F7FA;
+            --surface: #FFFFFF;
+            --text-main: #1E293B;
+            --text-secondary: #64748B;
+            --success: #10B981;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        /* Layout Fix: Memastikan App Shell memenuhi layar */
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; overscroll-behavior: none; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-light); color: var(--text-main); }
+        #root { height: 100%; width: 100%; display: flex; flex-direction: column; }
+
+        /* Hide Spin Buttons */
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        /* Utility Classes */
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .justify-end { justify-content: flex-end; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-4 { gap: 1rem; }
+        .p-4 { padding: 1rem; }
+        .p-2 { padding: 0.5rem; }
+        .p-3 { padding: 0.75rem; }
+        .p-0 { padding: 0; }
+        .m-0 { margin: 0; }
+        .mb-1 { margin-bottom: 0.25rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mb-6 { margin-bottom: 1.5rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-4 { margin-top: 1rem; }
+        .ml-1 { margin-left: 0.25rem; }
+        .ml-2 { margin-left: 0.5rem; }
+        .text-sm { font-size: 0.875rem; }
+        .text-xs { font-size: 0.75rem; }
+        .text-lg { font-size: 1.125rem; }
+        .text-xl { font-size: 1.25rem; }
+        .font-bold { font-weight: 700; }
+        .font-medium { font-weight: 500; }
+        .font-mono { font-family: 'Roboto Mono', monospace; }
+        .text-primary { color: var(--primary); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-white { color: white; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .w-full { width: 100%; }
+        .rounded { border-radius: 0.5rem; }
+        .rounded-full { border-radius: 9999px; }
+        .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .bg-transparent { background-color: transparent; }
+        .border-0 { border: none !important; outline: none; }
+        .bg-white { background-color: #FFFFFF; }
+        .bg-gray-50 { background-color: #F9FAFB; }
+        .bg-gray-100 { background-color: #F3F4F6; }
+        .bg-blue-50 { background-color: #EFF6FF; }
+        .bg-blue-100 { background-color: #DBEAFE; }
+        .bg-yellow-50 { background-color: #FEFCE8; }
+        .bg-purple-100 { background-color: #F3E8FF; }
+        .bg-green-50 { background-color: #F0FDF4; }
+        .bg-red-50 { background-color: #FEF2F2; }
+        .bg-green-100 { background-color: #dcfce7; }
+        .bg-red-100 { background-color: #fee2e2; }
+
+        .capitalize { text-transform: capitalize; }
+        .text-green-600 { color: #16a34a !important; }
+        .text-red-600 { color: #dc2626 !important; }
+        .text-green-800 { color: #166534; }
+        .text-red-800 { color: #991b1b; }
+        .text-purple-700 { color: #7e22ce; }
+        .text-blue-800 { color: #1e40af; }
+        .text-gray-700 { color: #374151; }
+        
+        .border { border-width: 1px; border-style: solid; }
+        .border-gray-200 { border-color: #e5e7eb; }
+        .border-gray-300 { border-color: #d1d5db; }
+        .border-blue-200 { border-color: #bfdbfe; }
+        .border-green-300 { border-color: #86efac; }
+        .border-red-300 { border-color: #fca5a5; }
+
+        /* App Structure */
+        .app-header {
+            flex: 0 0 auto; /* Fixed height, dont shrink */
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 10;
+            padding-top: max(1rem, env(safe-area-inset-top)); /* Notch support */
+        }
+
+        .app-content {
+            flex: 1 1 auto; /* Grow and shrink */
+            overflow-y: auto; /* Scrollable */
+            padding: 1rem;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+
+        .app-footer {
+            flex: 0 0 auto; /* Fixed height */
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: 500;
+            z-index: 10;
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+
+        .card { background: var(--surface); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #E2E8F0; }
+        .btn { background-color: var(--primary); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; cursor: pointer; width: 100%; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background 0.2s; }
+        .btn:active { transform: scale(0.98); opacity: 0.9; }
+        .btn-secondary { background-color: var(--surface); color: var(--text-main); border: 1px solid #CBD5E1; }
+        .input-group { margin-bottom: 1rem; }
+        .input-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
+        .input-field { width: 100%; padding: 0.75rem; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 1rem; outline: none; background: var(--surface); }
+        .input-field:focus { border-color: var(--primary); border-width: 2px; padding: calc(0.75rem - 1px); }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .fab { position: fixed; bottom: 24px; right: 24px; background: var(--primary); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(2, 136, 209, 0.4); cursor: pointer; border: none; z-index: 15; }
+        
+        /* Install Prompt Animation */
+        .install-fab { 
+            position: fixed; 
+            bottom: 24px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: #1e293b; 
+            color: white; 
+            padding: 12px 24px; 
+            border-radius: 50px; 
+            font-weight: 600; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.25); 
+            z-index: 100; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            border: none;
+            cursor: pointer;
+            width: max-content;
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp { 
+            0% { transform: translate(-50%, 100%); opacity: 0; } 
+            100% { transform: translate(-50%, 0); opacity: 1; } 
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(2, 136, 209, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(2, 136, 209, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(2, 136, 209, 0); }
+        }
+        
+        .install-fab:active {
+            transform: translate(-50%, 2px);
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+      // Service Worker Registration for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+                console.log('SW registered: ', reg);
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed') {
+                            if (navigator.serviceWorker.controller) {
+                                console.log('New content is available; please refresh.');
+                            } else {
+                                console.log('Content is cached for offline use.');
+                            }
+                        }
+                    };
+                };
+            })
+            .catch(err => console.log('SW registration failed: ', err));
+        });
+      }
+    </script>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
