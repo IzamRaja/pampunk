@@ -55,6 +55,9 @@
         /* Hide Spin Buttons */
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+        
+        /* Global Input Style Fix */
+        input, select, textarea { color: var(--text-main); }
 
         /* Utility Classes */
         .flex { display: flex; }
@@ -167,7 +170,7 @@
         .btn-secondary { background-color: var(--surface); color: var(--text-main); border: 1px solid #CBD5E1; }
         .input-group { margin-bottom: 1rem; }
         .input-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
-        .input-field { width: 100%; padding: 0.75rem; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 1rem; outline: none; background: var(--surface); }
+        .input-field { width: 100%; padding: 0.75rem; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 1rem; outline: none; background: var(--surface); color: var(--text-main); }
         .input-field:focus { border-color: var(--primary); border-width: 2px; padding: calc(0.75rem - 1px); }
         .badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
         .fab { position: fixed; bottom: 24px; right: 24px; background: var(--primary); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(2, 136, 209, 0.4); cursor: pointer; border: none; z-index: 15; }

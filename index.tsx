@@ -414,16 +414,31 @@ const App = () => {
                 if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
                 else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber; 
                 
-                let message = `*TAGIHAN PAMSIMAS PUNGKURAN*\n\nYth. ${customer.name}\nPeriode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\nTipe: ${customer.type}\n\n📊 *Detail Meter:*\nMeteran Lama : ${padMeter(prevReading)}\nMeteran Baru : ${padMeter(currReadingNum)}\n*Penggunaan Air : ${usage} m³*\n\n💰 *Rincian Tagihan:*\nBiaya Beban : ${formatCurrency(BIAYA_BEBAN)}\nBiaya Pakai : ${formatCurrency(biayaPakai)}\n(${usage}m³ x ${formatCurrency(tarifPerM3)})\n`;
-                if(dendaAmount > 0) message += `Denda Keterlambatan : ${formatCurrency(dendaAmount)}\n`;
+                let message = `*PAMSIMAS PUNGKURAN*\n\n`;
+                message += `Kepada Pelanggan, *Bpk/Ibu ${customer.name.toUpperCase()}*\n\n`;
+                message += `Berikut rincian tagihan pemakaian air Anda:\n`;
+                message += `* Tipe : ${customer.type}\n`;
+                message += `* Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\n`;
+                message += `* Meteran Lama: ${padMeter(prevReading)}\n`;
+                message += `* Meteran Baru: ${padMeter(currReadingNum)}\n`;
+                message += `* Total Pemakaian: ${usage} m³\n\n`;
+
+                message += `Rincian Biaya:\n`;
+                message += `* Biaya Beban: ${formatCurrency(BIAYA_BEBAN)}\n`;
+                message += `* Biaya Pakai: ${formatCurrency(biayaPakai)}\n`;
+                message += `(Total pemakaian x nominal berdasar tipe pelanggan)\n\n`;
                 
-                if(arrearsTotal > 0) {
-                    message += `--------------------------\n`;
-                    message += `Tagihan Bulan Ini : ${formatCurrency(currentBillAmount)}\n`;
-                    message += `Tunggakan (${unpaidBills.length} bln) : ${formatCurrency(arrearsTotal)}\n`;
+                if (arrearsTotal > 0 || dendaAmount > 0) {
+                     if(dendaAmount > 0) message += `* Denda: ${formatCurrency(dendaAmount)}\n`;
+                     if(arrearsTotal > 0) message += `* Tunggakan: ${formatCurrency(arrearsTotal)}\n`;
+                     message += `\n*TOTAL TAGIHAN: ${formatCurrency(totalToPay)}*\n\n`;
+                } else {
+                     message += `*TOTAL TAGIHAN: ${formatCurrency(currentBillAmount)}*\n\n`;
                 }
 
-                message += `\n*TOTAL TAGIHAN : ${formatCurrency(totalToPay)}*\n\nMohon segera melakukan pembayaran.\nTerima kasih. Admin Pamsimas.`;
+                message += `_Lakukan pembayaran sebelum tanggal 10 untuk menghindari denda._\n\n`;
+                message += `_Terima kasih._`;
+
                 window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
             }
             setSelectedCustomerForRecording(null);
@@ -498,12 +513,41 @@ const App = () => {
         if(!bill) return;
 
         const isNowPaid = !bill.isPaid;
+        const customer = customers.find(c => c.id === bill.customerId);
         
         try {
             await updateDoc(doc(db, 'bills', billId), {
                 isPaid: isNowPaid, 
                 paidDate: isNowPaid ? Date.now() : null 
             });
+
+            // Kirim WA Konfirmasi jika tandai LUNAS
+            if (isNowPaid && customer) {
+                const hasPhone = customer.phone && customer.phone.trim().length > 0;
+                if (hasPhone) {
+                    let phoneNumber = customer.phone.replace(/\D/g, '');
+                    if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
+                    else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
+
+                    let message = `*PAMSIMAS PUNGKURAN*\n\n`;
+                    message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
+                    message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
+
+                    message += `RINCIAN PEMBAYARAN\n`;
+                    message += `Tipe: ${customer.type}\n`;
+                    
+                    const [y, m] = bill.month.split('-');
+                    const period = new Date(Number(y), Number(m)-1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                    
+                    message += `Periode: ${period}\n`;
+                    message += `Total tagihan: ${formatCurrency(bill.amount)}\n`;
+                    message += `Status: *LUNAS*\n\n`;
+                    message += `_Terima kasih._`;
+
+                    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
+                }
+            }
+
         } catch (error) {
             console.error("Error updating bill:", error);
             alert("Gagal update status bayar.");
@@ -724,18 +768,7 @@ const App = () => {
   return (
     <>
       <header className="app-header" style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem'}}>
-        <div className="w-full flex justify-between items-start absolute top-0 left-0 p-4">
-             {view !== 'dashboard' ? (
-                <button 
-                    onClick={() => setView('dashboard')} 
-                    className="bg-transparent border-0 p-0 text-white cursor-pointer"
-                >
-                    <span className="material-icons-round" style={{ fontSize: '1.5rem' }}>arrow_back</span>
-                </button>
-            ) : <div />}
-        </div>
-        
-        <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-6">PAMSIMAS PUNGKURAN</h1>
+        <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-2">PAMSIMAS PUNGKURAN</h1>
         <div className="flex flex-col justify-center items-center leading-none">
             <div className="text-sm opacity-90 font-medium">PUNGKURAN KWANGSAN JUMAPOLO</div>
             <div className="text-sm opacity-90 font-medium">KARANGANYAR</div>
