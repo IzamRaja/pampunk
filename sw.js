@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pamsimas-v6-app';
+const CACHE_NAME = 'pamsimas-v7-app-install';
 const urlsToCache = [
   './',
   './index.html',

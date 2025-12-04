@@ -9,7 +9,8 @@ import {
     onSnapshot, 
     query, 
     orderBy,
-    deleteDoc
+    deleteDoc,
+    getDocs
 } from 'firebase/firestore';
 
 // --- Types & Interfaces ---
@@ -93,7 +94,7 @@ const handleMeterInputChange = (val: string, setter: (v: string) => void) => {
 };
 
 // --- Login Component ---
-const LoginView = ({ onLogin }: { onLogin: () => void }) => {
+const LoginView = ({ onLogin, installPrompt, onInstall }: { onLogin: () => void, installPrompt: any, onInstall: () => void }) => {
     const [u, setU] = useState('');
     const [p, setP] = useState('');
     const [err, setErr] = useState('');
@@ -112,17 +113,29 @@ const LoginView = ({ onLogin }: { onLogin: () => void }) => {
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
                 <h2 className="text-xl font-bold text-center mb-4 text-primary">Login</h2>
-                <form onSubmit={handleLogin}>
+                <form onSubmit={handleLogin} autoComplete="off">
                     <div className="input-group">
                         <label>Username</label>
-                        <input className="input-field" style={{color: '#000'}} type="text" value={u} onChange={e => setU(e.target.value)} placeholder="Masukkan username" />
+                        <input className="input-field" style={{color: '#000'}} type="text" value={u} onChange={e => setU(e.target.value)} placeholder="Masukkan username" autoComplete="off" />
                     </div>
                     <div className="input-group">
                         <label>Password</label>
-                        <input className="input-field" style={{color: '#000'}} type="password" value={p} onChange={e => setP(e.target.value)} placeholder="Masukkan password" />
+                        <input className="input-field" style={{color: '#000'}} type="password" value={p} onChange={e => setP(e.target.value)} placeholder="Masukkan password" autoComplete="new-password" />
                     </div>
                     {err && <div className="text-red-600 text-sm text-center mb-3">{err}</div>}
-                    <button type="submit" className="btn">Masuk</button>
+                    <button type="submit" className="btn mb-4">Masuk</button>
+                    
+                    {installPrompt && (
+                        <button 
+                            type="button" 
+                            onClick={onInstall} 
+                            className="btn btn-secondary"
+                            style={{borderColor: '#0288D1', color: '#0288D1'}}
+                        >
+                            <span className="material-icons-round">download</span>
+                            Install Aplikasi
+                        </button>
+                    )}
                 </form>
             </div>
         </div>
@@ -136,12 +149,40 @@ const App = () => {
   const [view, setView] = useState<'dashboard' | 'customers' | 'recording' | 'bills' | 'cashbook'>('dashboard');
   const [billFilter, setBillFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [selectedCustomerForRecording, setSelectedCustomerForRecording] = useState<Customer | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
   
   // --- FIREBASE DATA STATE ---
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [manualTransactions, setManualTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // --- PWA INSTALL HANDLER ---
+  useEffect(() => {
+    const handler = (e: any) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = () => {
+    if (!installPrompt) return;
+    // Show the install prompt
+    installPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    installPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted the install prompt');
+            setInstallPrompt(null); // Hide button after install
+        } else {
+            console.log('User dismissed the install prompt');
+        }
+    });
+  };
 
   // --- FIREBASE SUBSCRIPTIONS (REALTIME SYNC) ---
   useEffect(() => {
@@ -184,9 +225,8 @@ const App = () => {
     <button 
         onClick={() => setView('dashboard')} 
         className="flex items-center cursor-pointer border-0 p-0 hover:opacity-80 transition-opacity bg-transparent"
-        style={{ color: '#29B6F6', fontSize: '0.75rem', fontWeight: 'normal', border: 'none', whiteSpace: 'nowrap' }}
+        style={{ color: '#29B6F6', fontSize: '0.85rem', fontWeight: '500', border: 'none', whiteSpace: 'nowrap' }}
     >
-        <span className="material-icons-round mr-1" style={{fontSize: '1rem'}}>arrow_back</span> 
         Kembali ke Dashboard
     </button>
   );
@@ -215,9 +255,9 @@ const App = () => {
     );
 
     return (
-      <div className="animate-fade-in">
+      <div className="animate-fade-in flex flex-col h-full">
         <h2 className="text-xl font-bold mb-6 text-primary text-center">Dashboard</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <MenuCard title="Data Pelanggan" value={totalCustomers} subtext="Orang" icon="people" color="#0288D1" onClick={() => setView('customers')} />
           <MenuCard title="Penggunaan" value={`${usageThisMonth} / ${totalUsageLifetime}`} subtext="Kubik (Bln/Tot)" icon="water_drop" color="#00BCD4" onClick={null} />
           <MenuCard title="Sudah Bayar" value={paidCount} subtext="Orang" icon="check_circle" color="#10B981" onClick={() => { setBillFilter('paid'); setView('bills'); }} />
@@ -294,11 +334,11 @@ const App = () => {
                 <div className="card">
                     <div className="input-group">
                         <label>Nama Lengkap</label>
-                        <input className="input-field" value={custForm.name} onChange={e => setCustForm({...custForm, name: e.target.value})} />
+                        <input className="input-field" value={custForm.name} onChange={e => setCustForm({...custForm, name: e.target.value})} autoComplete="off" />
                     </div>
                     <div className="input-group">
                         <label>Alamat / Dusun</label>
-                        <input className="input-field" value={custForm.address} onChange={e => setCustForm({...custForm, address: e.target.value})} />
+                        <input className="input-field" value={custForm.address} onChange={e => setCustForm({...custForm, address: e.target.value})} autoComplete="off" />
                     </div>
                     <div className="input-group">
                         <label>Tipe Pelanggan</label>
@@ -309,11 +349,11 @@ const App = () => {
                     </div>
                     <div className="input-group">
                         <label>Nomor HP (Opsional)</label>
-                        <input className="input-field" value={custForm.phone} onChange={e => setCustForm({...custForm, phone: e.target.value})} type="tel" />
+                        <input className="input-field" value={custForm.phone} onChange={e => setCustForm({...custForm, phone: e.target.value})} type="tel" autoComplete="off" />
                     </div>
                     <div className="input-group">
                         <label>{editingId ? 'Meteran Terakhir' : 'Meteran Awal'}</label>
-                        <input className="input-field text-right font-mono" value={custForm.initialMeter} onChange={e => handleMeterInputChange(e.target.value, (v) => setCustForm({...custForm, initialMeter: v}))} onBlur={e => setCustForm({...custForm, initialMeter: padMeter(e.target.value)})} type="text" inputMode="numeric" placeholder="00000" />
+                        <input className="input-field text-right font-mono" value={custForm.initialMeter} onChange={e => handleMeterInputChange(e.target.value, (v) => setCustForm({...custForm, initialMeter: v}))} onBlur={e => setCustForm({...custForm, initialMeter: padMeter(e.target.value)})} type="text" inputMode="numeric" placeholder="00000" autoComplete="off" />
                     </div>
                     <button onClick={handleSave} className="btn mt-4">{editingId ? 'Update Data' : 'Simpan Data'}</button>
                     {editingId && <button onClick={() => { setIsAdding(false); setEditingId(null); setCustForm({ name: '', address: '', phone: '', initialMeter: '', type: 'Umum' }); }} className="btn btn-secondary mt-2">Batal</button>}
@@ -329,7 +369,7 @@ const App = () => {
             <BackToDashboard />
         </div>
         <div className="mb-4">
-             <input className="input-field" placeholder="Cari nama atau alamat..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+             <input className="input-field" placeholder="Cari nama atau alamat..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
         </div>
         
         <div className="flex flex-col gap-2 pb-24">
@@ -337,15 +377,17 @@ const App = () => {
                     <div key={c.id} onClick={() => { setSelectedCustomerForRecording(c); setView('recording'); }} className="card m-0 cursor-pointer hover:bg-gray-50 active:scale-98 transition-transform">
                         <div className="flex justify-between items-start mb-1">
                             <div className="font-bold text-lg text-primary capitalize">{c.name}</div>
-                            <div className="flex flex-col items-end">
+                            <div className="flex flex-col items-end gap-2">
                                 <span className={`text-xs font-bold mb-1 ${c.type === 'Bisnis' ? 'text-purple-700' : 'text-gray-700'}`}>{c.type}</span>
-                                <button 
-                                    onClick={(e) => handleEditClick(e, c)} 
-                                    className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer"
-                                    style={{ color: '#29B6F6', zIndex: 2 }}
-                                >
-                                    Edit
-                                </button>
+                                <div className="flex gap-3">
+                                    <button 
+                                        onClick={(e) => handleEditClick(e, c)} 
+                                        className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer"
+                                        style={{ color: '#29B6F6', zIndex: 2 }}
+                                    >
+                                        Edit
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div className="text-sm text-secondary capitalize mb-1">{c.address}</div>
@@ -474,7 +516,7 @@ const App = () => {
                 </div>
                 <div className="mb-4">
                     <label className="block text-sm text-primary font-bold mb-1">Meteran Baru</label>
-                    <input type="text" inputMode="numeric" className="w-full p-2 border border-primary rounded text-right font-bold text-lg outline-none focus:ring-2 ring-blue-300 bg-white" value={currentReading} onChange={(e) => handleMeterInputChange(e.target.value, setCurrentReading)} onBlur={() => setCurrentReading(padMeter(currentReading))} placeholder="00000" autoFocus />
+                    <input type="text" inputMode="numeric" className="w-full p-2 border border-primary rounded text-right font-bold text-lg outline-none focus:ring-2 ring-blue-300 bg-white" value={currentReading} onChange={(e) => handleMeterInputChange(e.target.value, setCurrentReading)} onBlur={() => setCurrentReading(padMeter(currentReading))} placeholder="00000" autoFocus autoComplete="off" />
                 </div>
                 <div className="mb-6">
                     <label className="block text-sm text-secondary mb-1">Penggunaan Air (m³)</label>
@@ -529,11 +571,11 @@ const App = () => {
                     if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
                     else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
 
-                    let message = `*PAMSIMAS PUNGKURAN*\n\n`;
-                    message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
+                    let message = `PAMSIMAS PUNGKURAN\n\n`;
+                    message += `Terima kasih Bpk/Ibu ${customer.name.toUpperCase()}.\n`;
                     message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
 
-                    message += `RINCIAN PEMBAYARAN\n`;
+                    message += `Rincian Pembayaran:\n`;
                     message += `Tipe: ${customer.type}\n`;
                     
                     const [y, m] = bill.month.split('-');
@@ -551,6 +593,17 @@ const App = () => {
         } catch (error) {
             console.error("Error updating bill:", error);
             alert("Gagal update status bayar.");
+        }
+    };
+
+    const handleDeleteBill = async (billId: string) => {
+        if(confirm('Hapus tagihan ini? Data historis akan hilang.')) {
+            try {
+                await deleteDoc(doc(db, 'bills', billId));
+            } catch (error) {
+                console.error("Error delete bill:", error);
+                alert("Gagal hapus tagihan.");
+            }
         }
     };
 
@@ -581,13 +634,18 @@ const App = () => {
                                         <div className="font-bold text-lg text-primary capitalize mb-1">{cust?.name || 'Unknown'}</div>
                                         <div className="text-xs text-secondary">{new Date(bill.dateCreated).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</div>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right flex flex-col items-end">
                                         <div className="font-bold text-lg mb-1">{formatCurrency(bill.amount)}</div>
-                                        {bill.isPaid ? (
-                                            <button onClick={() => togglePaid(bill.id)} className="text-sm font-bold underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: '#EF4444' }}>Batal Lunas</button>
-                                        ) : (
-                                            <button onClick={() => togglePaid(bill.id)} className="text-sm text-primary font-bold bg-transparent border-0 p-0 underline cursor-pointer">Tandai Lunas</button>
-                                        )}
+                                        <div className="flex gap-2">
+                                            {bill.isPaid ? (
+                                                <button onClick={() => togglePaid(bill.id)} className="text-sm font-bold underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: '#EF4444' }}>Batal Lunas</button>
+                                            ) : (
+                                                <button onClick={() => togglePaid(bill.id)} className="text-sm text-primary font-bold bg-transparent border-0 p-0 underline cursor-pointer">Tandai Lunas</button>
+                                            )}
+                                            <button onClick={() => handleDeleteBill(bill.id)} className="text-sm text-gray-400 font-bold bg-transparent border-0 p-0 cursor-pointer ml-2">
+                                                <span className="material-icons-round" style={{fontSize: '18px'}}>delete</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -623,6 +681,17 @@ const App = () => {
               console.error("Error add transaction:", error);
               alert("Gagal menyimpan transaksi.");
           }
+      };
+
+      const handleDeleteTx = async (id: string) => {
+        if(confirm('Hapus transaksi ini?')) {
+            try {
+                await deleteDoc(doc(db, 'transactions', id));
+            } catch (error) {
+                console.error("Error delete tx:", error);
+                alert("Gagal hapus transaksi.");
+            }
+        }
       };
 
       const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -687,7 +756,7 @@ const App = () => {
                      <div className="text-xs font-bold text-transparent mb-1 ml-1 select-none">.</div>
                      <button onClick={() => setShowModal(true)} className="card p-2 m-0 border border-gray-300 bg-white flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:scale-95 transition-transform w-full">
                         <span className="material-icons-round text-primary" style={{fontSize: '1.25rem'}}>add_circle</span>
-                        <div className="text-xs font-bold text-primary">Tambah</div>
+                        <div className="text-xs font-bold text-primary">Tambah Transaksi</div>
                     </button>
                  </div>
             </div>
@@ -701,8 +770,13 @@ const App = () => {
                             <div className="font-bold text-sm text-primary capitalize">{t.description}</div>
                             <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {t.isManual ? 'Manual' : 'Otomatis'}</div>
                         </div>
-                        <div className={`font-bold text-right ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
-                            {t.type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
+                        <div className="text-right">
+                             <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                                {t.type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
+                             </div>
+                             {t.isManual && (
+                                <button onClick={() => handleDeleteTx(t.id)} className="text-xs text-red-400 bg-transparent border-0 p-0 cursor-pointer mt-1">Hapus</button>
+                             )}
                         </div>
                     </div>
                 ))}
@@ -752,7 +826,7 @@ const App = () => {
 
   // --- Main Render ---
   if (!isLoggedIn) {
-      return <LoginView onLogin={() => setIsLoggedIn(true)} />;
+      return <LoginView onLogin={() => setIsLoggedIn(true)} installPrompt={installPrompt} onInstall={handleInstallClick} />;
   }
   
   // Show loading indicator when first fetching data
@@ -784,6 +858,17 @@ const App = () => {
       </main>
 
       <footer className="app-footer">copyright admin.pampunk 2026</footer>
+      
+      {/* Tombol Floating Install khusus di Dashboard jika belum diinstall */}
+      {installPrompt && isLoggedIn && (
+          <button 
+              onClick={handleInstallClick}
+              className="install-fab"
+          >
+              <span className="material-icons-round">download</span>
+              Install Aplikasi
+          </button>
+      )}
     </>
   );
 };
