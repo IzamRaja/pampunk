@@ -487,7 +487,7 @@ const App = () => {
                 if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
                 else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber; 
                 
-                let message = `*TAGIHAN PAMSIMAS PUNGKURAN*\n\nYth. ${customer.name}\nPeriode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\nTipe: ${customer.type}\n\n📊 *Detail Meter:*\nMeteran Lama : ${padMeter(prevReading)}\nMeteran Baru : ${padMeter(currReadingNum)}\n*Penggunaan Air : ${usage} m³*\n\n💰 *Rincian Tagihan:*\nBiaya Beban : ${formatCurrency(BIAYA_BEBAN)}\nBiaya Pakai : ${formatCurrency(biayaPakai)}\n(${usage}m³ x ${formatCurrency(tarifPerM3)})\n`;
+                let message = `*TAGIHAN PAMSIMAS PUNGKURAN*\n\nYth. ${customer.name}\nPeriode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\nTipe: ${customer.type}\n\n?? *Detail Meter:*\nMeteran Lama : ${padMeter(prevReading)}\nMeteran Baru : ${padMeter(currReadingNum)}\n*Penggunaan Air : ${usage} m�*\n\n?? *Rincian Tagihan:*\nBiaya Beban : ${formatCurrency(BIAYA_BEBAN)}\nBiaya Pakai : ${formatCurrency(biayaPakai)}\n(${usage}m� x ${formatCurrency(tarifPerM3)})\n`;
                 if(dendaAmount > 0) message += `Denda Keterlambatan : ${formatCurrency(dendaAmount)}\n`;
                 
                 if(arrearsTotal > 0) {
@@ -535,14 +535,14 @@ const App = () => {
                     <input type="text" inputMode="numeric" className="w-full p-2 border border-primary rounded text-right font-bold text-lg outline-none focus:ring-2 ring-blue-300 bg-white" value={currentReading} onChange={(e) => handleMeterInputChange(e.target.value, setCurrentReading)} onBlur={() => setCurrentReading(padMeter(currentReading))} placeholder="00000" autoFocus />
                 </div>
                 <div className="mb-6">
-                    <label className="block text-sm text-secondary mb-1">Penggunaan Air (m³)</label>
+                    <label className="block text-sm text-secondary mb-1">Penggunaan Air (m�)</label>
                     <div className="w-full p-2 bg-blue-50 rounded text-right font-bold text-primary border border-blue-200 text-lg">{usage}</div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded border border-dashed border-gray-300 mb-6">
                     <div className="text-xs font-bold text-secondary uppercase mb-3 tracking-wider">Rincian Tagihan</div>
                     <div className="flex justify-between text-sm mb-2"><span className="text-gray-600">Biaya Beban</span><span className="font-medium">{formatCurrency(BIAYA_BEBAN)}</span></div>
-                    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-gray-200"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m³ x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
-                    {dendaAmount > 0 && <div className="flex justify-between text-sm mb-3 text-red-600"><span>Denda (> tgl {TANGGAL_DENDA})</span><span className="font-medium">{formatCurrency(dendaAmount)}</span></div>}
+                    <div className="flex justify-between text-sm mb-2 pb-2 border-b border-gray-200"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m� x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
+                    {dendaAmount > 0 && <div className="flex justify-between text-sm mb-3 text-red-600"><span>Denda (&gt; tgl {TANGGAL_DENDA})</span><span className="font-medium">{formatCurrency(dendaAmount)}</span></div>}
                     
                     {arrearsTotal > 0 && (
                         <div className="flex justify-between text-sm mb-2 text-red-600 pt-2 border-t border-gray-200 border-dashed">
@@ -553,7 +553,7 @@ const App = () => {
 
                     <div className="flex justify-between items-center mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
                 </div>
-                {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">⚠️ Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
+                {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">?? Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
                 <div className="flex flex-col gap-3">
                      <button onClick={() => handleSave(hasPhone)} disabled={!isValid || isSaving} className={`btn ${!isValid ? 'opacity-50 cursor-not-allowed' : ''}`} style={{backgroundColor: '#10B981'}}>
                         <span className="material-icons-round">{isSaving ? 'hourglass_empty' : (hasPhone ? 'send' : 'save')}</span>
@@ -728,7 +728,7 @@ const App = () => {
                     <div key={t.id} className="card p-3 mb-0 flex justify-between items-center">
                         <div>
                             <div className="font-bold text-sm text-primary capitalize">{t.description}</div>
-                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {t.isManual ? 'Manual' : 'Otomatis'}</div>
+                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} � {t.isManual ? 'Manual' : 'Otomatis'}</div>
                         </div>
                         <div className={`font-bold text-right ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
                             {t.type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
@@ -857,7 +857,7 @@ const App = () => {
                 <div className="bg-gray-50 p-3 rounded mb-3 border border-gray-200">
                     <div className="font-bold text-gray-800 mb-1 flex items-center gap-2"><span className="material-icons-round text-sm">android</span> Android (Chrome)</div>
                     <ol className="text-sm text-gray-600 pl-4 m-0 space-y-1">
-                        <li>Ketuk ikon titik tiga <strong>(⋮)</strong> di pojok kanan atas browser.</li>
+                        <li>Ketuk ikon titik tiga <strong>(?)</strong> di pojok kanan atas browser.</li>
                         <li>Pilih <strong>"Install App"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.</li>
                     </ol>
                 </div>
