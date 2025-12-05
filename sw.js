@@ -1,9 +1,9 @@
-const CACHE_NAME = 'pamsimas-v8-fix-install';
+const CACHE_NAME = 'pamsimas-v10-final-fix';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
-  './logo.png',
+  './logo.svg',
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone/babel.min.js',
@@ -18,8 +18,6 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
         console.log('Opened cache');
-        // Gunakan catch agar jika satu file gagal (misal logo.png belum ada), 
-        // service worker tetap terinstall agar aplikasi tetap jalan.
         return cache.addAll(urlsToCache).catch(err => {
             console.error('Gagal cache beberapa file:', err);
         });

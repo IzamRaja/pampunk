@@ -21,6 +21,7 @@ interface Customer {
   phone: string;
   type: 'Umum' | 'Bisnis';
   lastMeterReading: number;
+  createdAt?: number; // Penanda waktu input
 }
 
 interface Bill {
@@ -94,7 +95,17 @@ const handleMeterInputChange = (val: string, setter: (v: string) => void) => {
 };
 
 // --- Login Component ---
-const LoginView = ({ onLogin, installPrompt, onInstall }: { onLogin: () => void, installPrompt: any, onInstall: () => void }) => {
+const LoginView = ({ 
+    onLogin, 
+    installPrompt, 
+    onInstall, 
+    isAppInstalled 
+}: { 
+    onLogin: () => void, 
+    installPrompt: any, 
+    onInstall: () => void,
+    isAppInstalled: boolean
+}) => {
     const [u, setU] = useState('');
     const [p, setP] = useState('');
     const [err, setErr] = useState('');
@@ -112,22 +123,30 @@ const LoginView = ({ onLogin, installPrompt, onInstall }: { onLogin: () => void,
     return (
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
-                <h2 className="text-xl font-bold text-center mb-4 text-primary">Login</h2>
+                <div className="flex flex-col items-center mb-6">
+                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-2">
+                        <span className="material-icons-round text-4xl text-primary">water_drop</span>
+                    </div>
+                    <h2 className="text-xl font-bold text-center text-primary m-0">PAMSIMAS</h2>
+                    <div className="text-sm text-secondary">Pungkuran Kwangsan</div>
+                </div>
+                
                 <form onSubmit={handleLogin} autoComplete="off">
                     <div className="input-group">
                         <label>Username</label>
-                        <input className="input-field" style={{color: '#000'}} type="text" value={u} onChange={e => setU(e.target.value)} placeholder="Masukkan username" autoComplete="off" />
+                        <input className="input-field" style={{color: '#000'}} type="text" value={u} onChange={e => setU(e.target.value)} autoComplete="off" />
                     </div>
                     <div className="input-group">
                         <label>Password</label>
-                        <input className="input-field" style={{color: '#000'}} type="password" value={p} onChange={e => setP(e.target.value)} placeholder="Masukkan password" autoComplete="new-password" />
+                        <input className="input-field" style={{color: '#000'}} type="password" value={p} onChange={e => setP(e.target.value)} autoComplete="new-password" />
                     </div>
-                    {err && <div className="text-red-600 text-sm text-center mb-3">{err}</div>}
+                    {err && <div className="text-red-600 text-sm text-center mb-3 bg-red-50 p-2 rounded">{err}</div>}
                     <button type="submit" className="btn mb-4">Masuk</button>
                     
+                    {/* Hanya tampilkan tombol install jika browser benar-benar siap */}
                     {installPrompt && (
-                        <div className="text-center pt-4 border-t border-gray-200">
-                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia</div>
+                        <div className="text-center pt-4 border-t border-gray-200 animate-fade-in">
+                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia untuk diinstall</div>
                              <button 
                                 type="button" 
                                 onClick={onInstall} 
@@ -135,11 +154,14 @@ const LoginView = ({ onLogin, installPrompt, onInstall }: { onLogin: () => void,
                                 style={{borderColor: '#0288D1', color: '#0288D1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}
                             >
                                 <span className="material-icons-round">install_mobile</span>
-                                Install Aplikasi
+                                Install ke Layar Utama
                             </button>
                         </div>
                     )}
                 </form>
+            </div>
+            <div className="mt-8 text-xs text-gray-400 text-center">
+                &copy; 2026 Aplikasi Pamsimas Pungkuran
             </div>
         </div>
     );
@@ -165,11 +187,12 @@ const App = () => {
 
   // --- PWA INSTALL HANDLER ---
   useEffect(() => {
-    // Cek apakah sudah berjalan dalam mode aplikasi
+    // 1. Cek Mode Standalone (Sudah diinstall)
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
         setIsAppInstalled(true);
     }
 
+    // 2. Event Listener untuk Install Prompt
     const handler = (e: any) => {
         // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
@@ -187,10 +210,7 @@ const App = () => {
     // Wait for the user to respond to the prompt
     installPrompt.userChoice.then((choiceResult: any) => {
         if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the install prompt');
             setInstallPrompt(null);
-        } else {
-            console.log('User dismissed the install prompt');
         }
     });
   };
@@ -200,8 +220,22 @@ const App = () => {
     // 1. Subscribe to Customers
     const unsubCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
         const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Customer[];
-        // Sort alphabetically by name
-        data.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Sorting berdasarkan urutan input (createdAt).
+        // Lama -> Baru (Ascending).
+        // Jika data lama tidak punya createdAt, dianggap 0 (paling atas), lalu diurutkan nama.
+        data.sort((a, b) => {
+            const timeA = a.createdAt || 0;
+            const timeB = b.createdAt || 0;
+            
+            // Jika sama-sama data lama (0) atau waktu sama, urutkan abjad sebagai fallback
+            if (timeA === timeB) {
+                return a.name.localeCompare(b.name);
+            }
+            // Urutan waktu: kecil (lama) ke besar (baru)
+            return timeA - timeB;
+        });
+        
         setCustomers(data);
     });
 
@@ -296,7 +330,8 @@ const App = () => {
                     address: custForm.address,
                     phone: custForm.phone,
                     type: custForm.type,
-                    lastMeterReading: Number(custForm.initialMeter) || 0
+                    lastMeterReading: Number(custForm.initialMeter) || 0,
+                    createdAt: Date.now() // Simpan waktu pembuatan untuk sorting
                 });
             }
         } catch (error) {
@@ -365,7 +400,8 @@ const App = () => {
     return (
       <div className="relative h-full">
         <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold m-0">Data Pelanggan ({customers.length})</h2>
+            <h2 className="text-xl font-bold m-0">Data Pelanggan</h2>
+            <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
         </div>
         <div className="mb-4">
              <input className="input-field" placeholder="Cari nama atau alamat..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
@@ -496,6 +532,7 @@ const App = () => {
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">Catat Meter & Tagihan</h2>
+                <button onClick={() => setView('customers')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
             </div>
             <div className="card bg-blue-50 border-blue-200 mb-4">
                 <div className="flex justify-between items-start mb-1">
@@ -620,6 +657,7 @@ const App = () => {
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">{title}</h2>
+                <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
             </div>
             {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Belum ada data.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
@@ -723,6 +761,7 @@ const App = () => {
           <div className="relative h-full">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold m-0">Buku Kas</h2>
+                <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
             </div>
 
             <div className="mb-4">
@@ -822,7 +861,14 @@ const App = () => {
 
   // --- Main Render ---
   if (!isLoggedIn) {
-      return <LoginView onLogin={() => setIsLoggedIn(true)} installPrompt={installPrompt} onInstall={handleInstallClick} />;
+      return (
+        <LoginView 
+            onLogin={() => setIsLoggedIn(true)} 
+            installPrompt={installPrompt} 
+            onInstall={handleInstallClick} 
+            isAppInstalled={isAppInstalled}
+        />
+      );
   }
   
   // Show loading indicator when first fetching data
@@ -837,7 +883,7 @@ const App = () => {
 
   return (
     <>
-      <header className="app-header" onClick={() => setView('dashboard')} style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem', cursor: 'pointer'}}>
+      <header className="app-header" style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem', position: 'relative'}}>
         <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-2">PAMSIMAS PUNGKURAN</h1>
         <div className="flex flex-col justify-center items-center leading-none">
             <div className="text-sm opacity-90 font-medium">PUNGKURAN KWANGSAN JUMAPOLO</div>
