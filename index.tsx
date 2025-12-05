@@ -124,9 +124,8 @@ const LoginView = ({
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
                 <div className="flex flex-col items-center mb-6">
-                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-2">
-                        <span className="material-icons-round text-4xl text-primary">water_drop</span>
-                    </div>
+                    {/* Ubah ke logo.png karena user mengupload png */}
+                    <img src="./logo.png" alt="Logo Pamsimas" style={{width: '80px', height: '80px', objectFit: 'contain', marginBottom: '1rem'}} />
                     <h2 className="text-xl font-bold text-center text-primary m-0">PAMSIMAS</h2>
                     <div className="text-sm text-secondary">Pungkuran Kwangsan</div>
                 </div>
@@ -266,6 +265,27 @@ const App = () => {
   const totalManualExpense = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
   const lifetimeBalance = (totalBillIncome + totalManualIncome) - totalManualExpense;
 
+  const handleBackupData = () => {
+      const backupData = {
+          exportDate: new Date().toISOString(),
+          stats: {
+              totalCustomers: customers.length,
+              balance: lifetimeBalance
+          },
+          customers: customers,
+          bills: bills,
+          transactions: manualTransactions
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `pamsimas_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchorNode); // required for firefox
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
+
   const DashboardView = () => {
     const currentMonth = getCurrentMonth();
     const monthBills = bills.filter(b => b.month === currentMonth);
@@ -299,6 +319,21 @@ const App = () => {
           <MenuCard title="Belum Bayar" value={unpaidCount} subtext="Orang" icon="warning" color="#EF4444" onClick={() => { setBillFilter('unpaid'); setView('bills'); }} />
           <MenuCard title="Kas" value={formatCurrency(lifetimeBalance)} subtext="Saldo Akhir" icon="account_balance_wallet" color="#6366F1" onClick={null} />
           <MenuCard title="Buku Kas" value="Laporan" subtext="Lihat Detail" icon="assessment" color="#F59E0B" onClick={() => setView('cashbook')} />
+        </div>
+        
+        {/* Tombol Backup Data Minimalis */}
+        <div className="mt-4 flex flex-col items-center">
+            <button 
+                onClick={handleBackupData}
+                className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
+                style={{color: '#0288D1', fontSize: '0.75rem', fontWeight: 500}}
+            >
+                <span className="material-icons-round" style={{fontSize: '1rem'}}>cloud_download</span>
+                <span>Backup</span>
+            </button>
+            <div className="text-center text-gray-400" style={{fontSize: '0.7rem'}}>
+                Download data secara berkala agar aman.
+            </div>
         </div>
       </div>
     );

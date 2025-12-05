@@ -1,9 +1,9 @@
-const CACHE_NAME = 'pamsimas-v10-final-fix';
+const CACHE_NAME = 'pamsimas-v14-force-png';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
-  './logo.svg',
+  './logo.png',
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone/babel.min.js',
@@ -45,6 +45,16 @@ self.addEventListener('activate', event => {
 
 // Fetch Event: Network First, Fallback to Cache
 self.addEventListener('fetch', event => {
+  // Strategi khusus untuk navigasi halaman (HTML)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('./index.html');
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .catch(() => {
