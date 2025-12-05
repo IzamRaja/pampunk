@@ -121,24 +121,6 @@ const LoginView = ({
         }
     };
 
-    const handleResetApp = async () => {
-        if(confirm('Aplikasi akan dimuat ulang untuk memperbarui sistem. Lanjutkan?')) {
-            if ('serviceWorker' in navigator) {
-                const registrations = await navigator.serviceWorker.getRegistrations();
-                for (let registration of registrations) {
-                    await registration.unregister();
-                }
-            }
-            if(window.caches) {
-                const keys = await window.caches.keys();
-                for(let key of keys) {
-                    await window.caches.delete(key);
-                }
-            }
-            window.location.reload();
-        }
-    }
-
     return (
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
@@ -146,13 +128,13 @@ const LoginView = ({
                     {/* Menggunakan logo.png - User HARUS upload ini */}
                     {!imgError ? (
                         <img 
-                            src="./logo.png?v=19"
+                            src="./logo.png?v=21"
                             alt="Logo Pamsimas" 
-                            style={{width: '80px', height: '80px', objectFit: 'contain', marginBottom: '1rem'}}
+                            style={{width: '40px', height: '40px', objectFit: 'contain', marginBottom: '1rem'}}
                             onError={() => setImgError(true)}
                         />
                     ) : (
-                        <div style={{fontSize: '4rem', marginBottom: '0.5rem', lineHeight: 1}}>💧</div>
+                        <div style={{fontSize: '3rem', marginBottom: '1rem', lineHeight: 1}}>💧</div>
                     )}
                     <h2 className="text-xl font-bold text-center text-primary m-0">PAMSIMAS</h2>
                     <div className="text-sm text-secondary">Pungkuran Kwangsan</div>
@@ -185,12 +167,6 @@ const LoginView = ({
                             </button>
                         </div>
                     )}
-
-                    <div className="text-center mt-2">
-                        <button type="button" onClick={handleResetApp} className="text-xs text-gray-400 underline bg-transparent border-0 cursor-pointer">
-                            Update / Reset Aplikasi
-                        </button>
-                    </div>
                 </form>
             </div>
             <div className="mt-8 text-xs text-gray-400 text-center">
@@ -203,7 +179,9 @@ const LoginView = ({
 // --- Main App Component ---
 const App = () => {
   // --- State ---
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // Inisialisasi state login berdasarkan localStorage agar persisten saat refresh
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('pamsimas_auth') === 'true');
+  
   const [view, setView] = useState<'dashboard' | 'customers' | 'recording' | 'bills' | 'cashbook'>('dashboard');
   const [billFilter, setBillFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [selectedCustomerForRecording, setSelectedCustomerForRecording] = useState<Customer | null>(null);
@@ -217,6 +195,20 @@ const App = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [manualTransactions, setManualTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // --- AUTH HANDLERS ---
+  const handleLoginSuccess = () => {
+      localStorage.setItem('pamsimas_auth', 'true');
+      setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+      if(confirm('Apakah Anda yakin ingin keluar dari aplikasi?')) {
+          localStorage.removeItem('pamsimas_auth');
+          setIsLoggedIn(false);
+          setView('dashboard'); // Reset view
+      }
+  };
 
   // --- PWA INSTALL HANDLER ---
   useEffect(() => {
@@ -254,19 +246,15 @@ const App = () => {
     const unsubCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
         const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Customer[];
         
-        // Sorting berdasarkan urutan input (createdAt).
-        // Lama -> Baru (Ascending).
-        // Jika data lama tidak punya createdAt, dianggap 0 (paling atas), lalu diurutkan nama.
+        // Sorting Logic: Berdasarkan waktu input (createdAt)
         data.sort((a, b) => {
             const timeA = a.createdAt || 0;
             const timeB = b.createdAt || 0;
             
-            // Jika sama-sama data lama (0) atau waktu sama, urutkan abjad sebagai fallback
-            if (timeA === timeB) {
-                return a.name.localeCompare(b.name);
+            if (timeA !== timeB) {
+                return timeA - timeB; // Lama ke Baru (Urutan Input)
             }
-            // Urutan waktu: kecil (lama) ke besar (baru)
-            return timeA - timeB;
+            return a.name.localeCompare(b.name);
         });
         
         setCustomers(data);
@@ -355,8 +343,8 @@ const App = () => {
           <MenuCard title="Buku Kas" value="Laporan" subtext="Lihat Detail" icon="assessment" color="#F59E0B" onClick={() => setView('cashbook')} />
         </div>
         
-        {/* Tombol Backup Data Minimalis */}
-        <div className="mt-4 flex flex-col items-center">
+        {/* Tombol Backup & Logout */}
+        <div className="mt-4 flex flex-col items-center gap-3">
             <button 
                 onClick={handleBackupData}
                 className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
@@ -364,6 +352,15 @@ const App = () => {
             >
                 <span className="material-icons-round" style={{fontSize: '1rem'}}>cloud_download</span>
                 <span>Backup</span>
+            </button>
+
+             <button 
+                onClick={handleLogout}
+                className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
+                style={{color: '#EF4444', fontSize: '0.75rem', fontWeight: 500}}
+            >
+                <span className="material-icons-round" style={{fontSize: '1rem'}}>logout</span>
+                <span>Log Out</span>
             </button>
         </div>
       </div>
@@ -397,7 +394,7 @@ const App = () => {
                     phone: custForm.phone,
                     type: custForm.type,
                     lastMeterReading: Number(custForm.initialMeter) || 0,
-                    createdAt: Date.now() // Simpan waktu pembuatan untuk sorting
+                    createdAt: Date.now()
                 });
             }
         } catch (error) {
@@ -457,7 +454,7 @@ const App = () => {
                         <input className="input-field text-right font-mono" value={custForm.initialMeter} onChange={e => handleMeterInputChange(e.target.value, (v) => setCustForm({...custForm, initialMeter: v}))} onBlur={e => setCustForm({...custForm, initialMeter: padMeter(e.target.value)})} type="text" inputMode="numeric" placeholder="00000" autoComplete="off" />
                     </div>
                     <button onClick={handleSave} className="btn mt-4">{editingId ? 'Update Data' : 'Simpan Data'}</button>
-                    {editingId && <button onClick={() => { setIsAdding(false); setEditingId(null); setCustForm({ name: '', address: '', phone: '', initialMeter: '', type: 'Umum' }); }} className="btn btn-secondary mt-2">Batal</button>}
+                    <button onClick={() => { setIsAdding(false); setEditingId(null); setCustForm({ name: '', address: '', phone: '', initialMeter: '', type: 'Umum' }); }} className="btn btn-secondary mt-2">Batal</button>
                 </div>
             </div>
         );
@@ -474,17 +471,24 @@ const App = () => {
         </div>
         
         <div className="flex flex-col gap-2 pb-24">
-            {filteredCustomers.length === 0 ? <div className="text-center text-secondary py-4">Tidak ditemukan data.</div> : filteredCustomers.map(c => (
-                    <div key={c.id} onClick={() => { setSelectedCustomerForRecording(c); setView('recording'); }} className="card m-0 cursor-pointer hover:bg-gray-50 active:scale-98 transition-transform">
+            {filteredCustomers.length === 0 ? <div className="text-center text-secondary py-4">Tidak ditemukan data.</div> : filteredCustomers.map((c, index) => (
+                    <div 
+                        key={c.id} 
+                        onClick={() => { setSelectedCustomerForRecording(c); setView('recording'); }} 
+                        className="card m-0 cursor-pointer hover:bg-gray-50 active:scale-98 transition-transform"
+                    >
                         <div className="flex justify-between items-start mb-1">
                             <div className="font-bold text-lg text-primary capitalize">{c.name}</div>
-                            <div className="flex flex-col items-end gap-2">
+                            
+                            {/* Tombol Aksi Kanan */}
+                            <div className="flex flex-col items-end gap-1">
                                 <span className={`text-xs font-bold mb-1 ${c.type === 'Bisnis' ? 'text-purple-700' : 'text-gray-700'}`}>{c.type}</span>
-                                <div className="flex gap-3">
+                                
+                                <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
                                     <button 
                                         onClick={(e) => handleEditClick(e, c)} 
                                         className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer"
-                                        style={{ color: '#29B6F6', zIndex: 2 }}
+                                        style={{ color: '#0288D1' }}
                                     >
                                         Edit
                                     </button>
@@ -569,7 +573,7 @@ const App = () => {
                 message += `Rincian Biaya:\n`;
                 message += `* Biaya Beban: ${formatCurrency(BIAYA_BEBAN)}\n`;
                 message += `* Biaya Pakai: ${formatCurrency(biayaPakai)}\n`;
-                message += `(Total pemakaian x nominal berdasar tipe pelanggan)\n\n`;
+                message += `(${usage} m³ x ${formatCurrency(tarifPerM3)})\n\n`;
                 
                 if (arrearsTotal > 0 || dendaAmount > 0) {
                      if(dendaAmount > 0) message += `* Denda: ${formatCurrency(dendaAmount)}\n`;
@@ -672,8 +676,8 @@ const App = () => {
                     if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
                     else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
 
-                    let message = `PAMSIMAS PUNGKURAN\n\n`;
-                    message += `Terima kasih Bpk/Ibu ${customer.name.toUpperCase()}.\n`;
+                    let message = `*PAMSIMAS PUNGKURAN*\n\n`;
+                    message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
                     message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
 
                     message += `Rincian Pembayaran:\n`;
@@ -683,7 +687,7 @@ const App = () => {
                     const period = new Date(Number(y), Number(m)-1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
                     
                     message += `Periode: ${period}\n`;
-                    message += `Total tagihan: ${formatCurrency(bill.amount)}\n`;
+                    message += `Tagihan: ${formatCurrency(bill.amount)}\n`;
                     message += `Status: *LUNAS*\n\n`;
                     message += `_Terima kasih._`;
 
@@ -694,17 +698,6 @@ const App = () => {
         } catch (error) {
             console.error("Error updating bill:", error);
             alert("Gagal update status bayar.");
-        }
-    };
-
-    const handleDeleteBill = async (billId: string) => {
-        if(confirm('Hapus tagihan ini? Data historis akan hilang.')) {
-            try {
-                await deleteDoc(doc(db, 'bills', billId));
-            } catch (error) {
-                console.error("Error delete bill:", error);
-                alert("Gagal hapus tagihan.");
-            }
         }
     };
 
@@ -737,15 +730,12 @@ const App = () => {
                                     </div>
                                     <div className="text-right flex flex-col items-end">
                                         <div className="font-bold text-lg mb-1">{formatCurrency(bill.amount)}</div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 justify-end items-center">
                                             {bill.isPaid ? (
-                                                <button onClick={() => togglePaid(bill.id)} className="text-sm font-bold underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: '#EF4444' }}>Batal Lunas</button>
+                                                <button onClick={() => togglePaid(bill.id)} className="text-sm font-bold underline bg-transparent border-0 p-0 cursor-pointer text-right ml-2" style={{ color: '#EF4444' }}>Batal Lunas</button>
                                             ) : (
-                                                <button onClick={() => togglePaid(bill.id)} className="text-sm text-primary font-bold bg-transparent border-0 p-0 underline cursor-pointer">Tandai Lunas</button>
+                                                <button onClick={() => togglePaid(bill.id)} className="text-sm text-primary font-bold bg-transparent border-0 p-0 underline cursor-pointer text-right ml-2">Tandai Lunas</button>
                                             )}
-                                            <button onClick={() => handleDeleteBill(bill.id)} className="text-sm text-gray-400 font-bold bg-transparent border-0 p-0 cursor-pointer ml-2">
-                                                <span className="material-icons-round" style={{fontSize: '18px'}}>delete</span>
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -929,7 +919,7 @@ const App = () => {
   if (!isLoggedIn) {
       return (
         <LoginView 
-            onLogin={() => setIsLoggedIn(true)} 
+            onLogin={handleLoginSuccess} 
             installPrompt={installPrompt} 
             onInstall={handleInstallClick} 
             isAppInstalled={isAppInstalled}
