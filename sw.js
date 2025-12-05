@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pamsimas-v14-force-png';
+const CACHE_NAME = 'pamsimas-v19-png-final';
 const urlsToCache = [
   './',
   './index.html',
@@ -14,10 +14,10 @@ const urlsToCache = [
 
 // Install Event: Cache Files
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  self.skipWaiting(); // Paksa SW baru untuk segera aktif
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-        console.log('Opened cache');
+        console.log('Opened cache: ' + CACHE_NAME);
         return cache.addAll(urlsToCache).catch(err => {
             console.error('Gagal cache beberapa file:', err);
         });
@@ -38,27 +38,34 @@ self.addEventListener('activate', event => {
         })
       );
     }).then(() => {
+        console.log('Clients claimed.');
         return self.clients.claim();
     })
   );
 });
 
-// Fetch Event: Network First, Fallback to Cache
+// Fetch Event: Network First for navigations, Stale-While-Revalidate for assets
 self.addEventListener('fetch', event => {
-  // Strategi khusus untuk navigasi halaman (HTML)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('./index.html');
-      })
+      fetch(event.request).catch(() => caches.match('./index.html'))
     );
     return;
   }
 
   event.respondWith(
-    fetch(event.request)
-      .catch(() => {
-        return caches.match(event.request);
-      })
+    caches.match(event.request).then(cachedResponse => {
+        const fetchPromise = fetch(event.request).then(networkResponse => {
+            if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                const responseToCache = networkResponse.clone();
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, responseToCache);
+                });
+            }
+            return networkResponse;
+        }).catch(err => console.log('Fetch failed, using cache only', err));
+
+        return cachedResponse || fetchPromise;
+    })
   );
 });

@@ -109,6 +109,7 @@ const LoginView = ({
     const [u, setU] = useState('');
     const [p, setP] = useState('');
     const [err, setErr] = useState('');
+    const [imgError, setImgError] = useState(false);
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,12 +121,39 @@ const LoginView = ({
         }
     };
 
+    const handleResetApp = async () => {
+        if(confirm('Aplikasi akan dimuat ulang untuk memperbarui sistem. Lanjutkan?')) {
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let registration of registrations) {
+                    await registration.unregister();
+                }
+            }
+            if(window.caches) {
+                const keys = await window.caches.keys();
+                for(let key of keys) {
+                    await window.caches.delete(key);
+                }
+            }
+            window.location.reload();
+        }
+    }
+
     return (
         <div style={{height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem'}}>
             <div className="card w-full" style={{maxWidth: '350px'}}>
                 <div className="flex flex-col items-center mb-6">
-                    {/* Ubah ke logo.png karena user mengupload png */}
-                    <img src="./logo.png" alt="Logo Pamsimas" style={{width: '80px', height: '80px', objectFit: 'contain', marginBottom: '1rem'}} />
+                    {/* Menggunakan logo.png - User HARUS upload ini */}
+                    {!imgError ? (
+                        <img 
+                            src="./logo.png?v=19"
+                            alt="Logo Pamsimas" 
+                            style={{width: '80px', height: '80px', objectFit: 'contain', marginBottom: '1rem'}}
+                            onError={() => setImgError(true)}
+                        />
+                    ) : (
+                        <div style={{fontSize: '4rem', marginBottom: '0.5rem', lineHeight: 1}}>💧</div>
+                    )}
                     <h2 className="text-xl font-bold text-center text-primary m-0">PAMSIMAS</h2>
                     <div className="text-sm text-secondary">Pungkuran Kwangsan</div>
                 </div>
@@ -144,7 +172,7 @@ const LoginView = ({
                     
                     {/* Hanya tampilkan tombol install jika browser benar-benar siap */}
                     {installPrompt && (
-                        <div className="text-center pt-4 border-t border-gray-200 animate-fade-in">
+                        <div className="text-center pt-4 border-t border-gray-200 animate-fade-in mb-4">
                              <div className="text-xs text-secondary mb-2">Aplikasi tersedia untuk diinstall</div>
                              <button 
                                 type="button" 
@@ -157,6 +185,12 @@ const LoginView = ({
                             </button>
                         </div>
                     )}
+
+                    <div className="text-center mt-2">
+                        <button type="button" onClick={handleResetApp} className="text-xs text-gray-400 underline bg-transparent border-0 cursor-pointer">
+                            Update / Reset Aplikasi
+                        </button>
+                    </div>
                 </form>
             </div>
             <div className="mt-8 text-xs text-gray-400 text-center">
@@ -331,9 +365,6 @@ const App = () => {
                 <span className="material-icons-round" style={{fontSize: '1rem'}}>cloud_download</span>
                 <span>Backup</span>
             </button>
-            <div className="text-center text-gray-400" style={{fontSize: '0.7rem'}}>
-                Download data secara berkala agar aman.
-            </div>
         </div>
       </div>
     );
