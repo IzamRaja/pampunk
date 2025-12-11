@@ -518,9 +518,12 @@ const App = () => {
     const usage = currReadingNum >= prevReading ? currReadingNum - prevReading : 0;
     const tarifPerM3 = customer.type === 'Bisnis' ? TARIF_BISNIS : TARIF_UMUM;
     const biayaPakai = usage * tarifPerM3;
-    const today = new Date();
-    const isLate = today.getDate() > TANGGAL_DENDA;
-    const dendaAmount = isLate ? BIAYA_DENDA : 0;
+    
+    // REVISI LOGIKA DENDA:
+    // Denda tidak diterapkan saat pencatatan meter. 
+    // Denda hanya diterapkan saat pembayaran (BillsView) jika melewati tanggal 10.
+    const dendaAmount = 0; 
+    
     const currentBillAmount = BIAYA_BEBAN + biayaPakai + dendaAmount;
 
     // Hitung Tunggakan (Bill sebelumnya yang belum lunas)
@@ -631,7 +634,7 @@ const App = () => {
                     <div className="text-xs font-bold text-secondary uppercase mb-3 tracking-wider">Rincian Tagihan</div>
                     <div className="flex justify-between text-sm mb-2"><span className="text-gray-600">Biaya Beban</span><span className="font-medium">{formatCurrency(BIAYA_BEBAN)}</span></div>
                     <div className="flex justify-between text-sm mb-2 pb-2 border-b border-gray-200"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m³ x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
-                    {dendaAmount > 0 && <div className="flex justify-between text-sm mb-3 text-red-600"><span>Denda (&gt; tgl {TANGGAL_DENDA})</span><span className="font-medium">{formatCurrency(dendaAmount)}</span></div>}
+                    {/* Denda disembunyikan saat pencatatan karena belum terlambat */}
                     
                     {arrearsTotal > 0 && (
                         <div className="flex justify-between text-sm mb-2 text-red-600 pt-2 border-t border-gray-200 border-dashed">
@@ -641,6 +644,7 @@ const App = () => {
                     )}
 
                     <div className="flex justify-between items-center mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
+                    <div className="text-xs text-center mt-2 text-gray-500 italic">*Denda Rp {formatCurrency(BIAYA_DENDA)} diterapkan jika bayar &gt; tgl {TANGGAL_DENDA}</div>
                 </div>
                 {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">⚠️ Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
                 <div className="flex flex-col gap-3">
@@ -655,6 +659,8 @@ const App = () => {
   };
 
   const BillsView = () => {
+    const [searchQuery, setSearchQuery] = useState('');
+
     const togglePaid = async (billId: string) => {
         const bill = bills.find(b => b.id === billId);
         if(!bill) return;
@@ -663,9 +669,40 @@ const App = () => {
         const customer = customers.find(c => c.id === bill.customerId);
         
         try {
+            // LOGIKA DENDA SAAT BAYAR
+            let finalAmount = bill.amount;
+            let denda = bill.details.denda || 0;
+
+            if (isNowPaid) {
+                // Saat Tandai Lunas: Cek tanggal
+                const today = new Date();
+                const currentMonthStr = getCurrentMonth(); // YYYY-MM sekarang
+                
+                // Jika bulan tagihan LEBIH KECIL dari bulan sekarang (Tunggakan bulan lalu), pasti kena denda
+                const isPastMonth = bill.month < currentMonthStr;
+                // Jika bulan tagihan SAMA dengan bulan sekarang, cek tanggal > 10
+                const isLateDay = today.getDate() > TANGGAL_DENDA;
+
+                if (isPastMonth || (bill.month === currentMonthStr && isLateDay)) {
+                    denda = BIAYA_DENDA;
+                    // Hitung ulang total: Beban + Pakai + Denda Baru
+                    finalAmount = bill.details.beban + bill.details.pakai + denda;
+                } else {
+                    denda = 0;
+                    finalAmount = bill.details.beban + bill.details.pakai;
+                }
+            } else {
+                // Saat Batal Lunas (Kembali ke Unpaid):
+                // Reset Denda ke 0 dan kembalikan harga normal agar bersih
+                denda = 0;
+                finalAmount = bill.details.beban + bill.details.pakai;
+            }
+
             await updateDoc(doc(db, 'bills', billId), {
                 isPaid: isNowPaid, 
-                paidDate: isNowPaid ? Date.now() : null 
+                paidDate: isNowPaid ? Date.now() : null,
+                amount: finalAmount,
+                "details.denda": denda
             });
 
             // Kirim WA Konfirmasi jika tandai LUNAS
@@ -687,7 +724,10 @@ const App = () => {
                     const period = new Date(Number(y), Number(m)-1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
                     
                     message += `Periode: ${period}\n`;
-                    message += `Tagihan: ${formatCurrency(bill.amount)}\n`;
+                    message += `Tagihan: ${formatCurrency(finalAmount)}\n`; // Gunakan finalAmount yang baru
+                    if(denda > 0) {
+                        message += `(Termasuk Denda: ${formatCurrency(denda)})\n`;
+                    }
                     message += `Status: *LUNAS*\n\n`;
                     message += `_Terima kasih._`;
 
@@ -702,9 +742,15 @@ const App = () => {
     };
 
     const filteredBills = bills.filter(b => {
-        if (billFilter === 'paid') return b.isPaid;
-        if (billFilter === 'unpaid') return !b.isPaid;
-        return true; 
+        const cust = customers.find(c => c.id === b.customerId);
+        
+        let matchStatus = true;
+        if (billFilter === 'paid') matchStatus = b.isPaid;
+        if (billFilter === 'unpaid') matchStatus = !b.isPaid;
+
+        const matchSearch = (cust?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+        return matchStatus && matchSearch;
     });
 
     const sortedBills = [...filteredBills].sort((a, b) => b.dateCreated - a.dateCreated);
@@ -718,6 +764,12 @@ const App = () => {
                 <h2 className="text-xl font-bold m-0">{title}</h2>
                 <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
             </div>
+            
+            {/* SEARCH BAR */}
+            <div className="mb-4">
+                 <input className="input-field" placeholder="Cari nama pelanggan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
+            </div>
+
             {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Belum ada data.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
                         const cust = customers.find(c => c.id === bill.customerId);
@@ -727,6 +779,7 @@ const App = () => {
                                     <div>
                                         <div className="font-bold text-lg text-primary capitalize mb-1">{cust?.name || 'Unknown'}</div>
                                         <div className="text-xs text-secondary">{new Date(bill.dateCreated).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</div>
+                                        {bill.details.denda > 0 && <div className="text-xs text-red-500 font-bold mt-1">+ Denda {formatCurrency(bill.details.denda)}</div>}
                                     </div>
                                     <div className="text-right flex flex-col items-end">
                                         <div className="font-bold text-lg mb-1">{formatCurrency(bill.amount)}</div>
