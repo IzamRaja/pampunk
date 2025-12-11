@@ -644,8 +644,6 @@ const App = () => {
                     )}
 
                     <div className="flex justify-between items-center mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
-                    {/* Tulisan peringatan denda dikembalikan */}
-                    <div className="text-xs text-center mt-2 text-gray-500 italic">*Denda Rp {formatCurrency(BIAYA_DENDA)} diterapkan jika bayar &gt; tgl {TANGGAL_DENDA}</div>
                 </div>
                 {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">⚠️ Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
                 <div className="flex flex-col gap-3">
@@ -771,11 +769,7 @@ const App = () => {
                  <input className="input-field" placeholder="Cari nama pelanggan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
             </div>
 
-            {billFilter === 'unpaid' && (
-                <div className="text-xs text-secondary mb-3 bg-yellow-50 p-2 rounded border border-yellow-200">
-                    <span className="font-bold text-yellow-700">Info:</span> Total tagihan di bawah ini sudah <b>otomatis</b> termasuk denda jika pembayaran dilakukan hari ini (lewat tgl {TANGGAL_DENDA}).
-                </div>
-            )}
+            {/* REMOVED INFO BOX FROM HERE */}
 
             {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Belum ada data.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
@@ -809,11 +803,12 @@ const App = () => {
                                     <div>
                                         <div className="font-bold text-lg text-primary capitalize mb-1">{cust?.name || 'Unknown'}</div>
                                         <div className="text-xs text-secondary">{new Date(bill.dateCreated).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</div>
-                                        {/* Tampilkan indikator denda jika ada (baik yang sudah tersimpan atau potensi) */}
-                                        {(bill.details.denda > 0 || potentialDenda > 0) && <div className="text-xs text-red-500 font-bold mt-1">+ Denda {formatCurrency(BIAYA_DENDA)}</div>}
+                                        {/* REMOVED DENDA FROM HERE */}
                                     </div>
                                     <div className="text-right flex flex-col items-end">
                                         <div className="font-bold text-lg mb-1">{formatCurrency(displayAmount)}</div>
+                                        {/* MOVED DENDA HERE AND UPDATED COLOR/TEXT */}
+                                        {(bill.details.denda > 0 || potentialDenda > 0) && <div className="text-xs text-red-600 font-bold mb-1">(termasuk denda {formatCurrency(BIAYA_DENDA)})</div>}
                                         <div className="flex gap-2 justify-end items-center">
                                             {bill.isPaid ? (
                                                 <button onClick={() => togglePaid(bill.id)} className="text-sm font-bold underline bg-transparent border-0 p-0 cursor-pointer text-right ml-2" style={{ color: '#EF4444' }}>Batal Lunas</button>
