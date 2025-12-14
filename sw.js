@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pamsimas-v21-cleanup';
+const CACHE_NAME = 'pamsimas-v22-cleanup';
 const urlsToCache = [
   './',
   './index.html',

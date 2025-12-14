@@ -394,10 +394,10 @@ const App = () => {
           <MenuCard title="Sudah Bayar" value={paidCount} subtext="Orang" icon="check_circle" color="#10B981" onClick={() => { setBillFilter('paid'); setView('bills'); }} />
           <MenuCard title="Belum Bayar" value={unpaidCount} subtext="Orang" icon="warning" color="#EF4444" onClick={() => { setBillFilter('unpaid'); setView('bills'); }} />
           <MenuCard title="Kas" value={formatCurrency(lifetimeBalance)} subtext="Saldo Akhir" icon="account_balance_wallet" color="#6366F1" onClick={null} />
-          <MenuCard title="Buku Kas" value="Laporan" subtext="Lihat Detail" icon="assessment" color="#F59E0B" onClick={() => setView('cashbook')} />
+          <MenuCard title="Input Kas" value="Transaksi" subtext="Masuk/Keluar" icon="edit_note" color="#F59E0B" onClick={() => setView('cashbook')} />
         </div>
         
-        {/* Tombol Download CSV (Menggantikan Backup) & Logout */}
+        {/* Tombol Download CSV (Menggantikan Backup) */}
         <div className="mt-4 flex flex-col items-center gap-3">
              <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
                 {/* Month Picker for Report */}
@@ -908,3 +908,111 @@ const App = () => {
   };
 
   const CashBookView = () => {
+    const [type, setType] = useState<'in' | 'out'>('out');
+    const [desc, setDesc] = useState('');
+    const [amount, setAmount] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSaveTransaction = async () => {
+        if(!desc || !amount) return;
+        setIsSaving(true);
+        try {
+            await addDoc(collection(db, 'transactions'), {
+                type,
+                description: desc,
+                amount: Number(amount.replace(/\D/g, '')),
+                date: Date.now(),
+                isManual: true
+            });
+            setDesc('');
+            setAmount('');
+        } catch(e) {
+            console.error(e);
+            alert('Gagal simpan transaksi');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteTransaction = async (id: string) => {
+        if(confirm('Hapus transaksi ini?')) {
+            await deleteDoc(doc(db, 'transactions', id));
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold m-0">Input Kas Manual</h2>
+                <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
+            </div>
+
+            <div className="card">
+                <div className="flex mb-4 bg-gray-100 rounded p-1">
+                    <button onClick={() => setType('in')} className={`flex-1 py-2 rounded text-sm font-bold transition-all ${type === 'in' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500'}`}>Pemasukan Lain</button>
+                    <button onClick={() => setType('out')} className={`flex-1 py-2 rounded text-sm font-bold transition-all ${type === 'out' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500'}`}>Pengeluaran</button>
+                </div>
+                <div className="input-group">
+                    <label>Keterangan</label>
+                    <input className="input-field" value={desc} onChange={e => setDesc(e.target.value)} placeholder={type === 'in' ? 'Contoh: Subsidi, Hibah' : 'Contoh: Beli Pipa, Token Listrik'} autoComplete="off" />
+                </div>
+                <div className="input-group">
+                    <label>Jumlah (Rp)</label>
+                    <input className="input-field" value={amount} onChange={e => handleMeterInputChange(e.target.value, setAmount)} inputMode="numeric" placeholder="0" autoComplete="off" />
+                </div>
+                <button onClick={handleSaveTransaction} disabled={!desc || !amount || isSaving} className="btn">
+                    {isSaving ? 'Menyimpan...' : 'Simpan Transaksi'}
+                </button>
+            </div>
+
+            <h3 className="text-sm font-bold text-secondary mb-2 uppercase">Riwayat Transaksi Manual</h3>
+            <div className="flex flex-col gap-2 pb-20">
+                {manualTransactions.length === 0 ? <div className="text-center text-sm text-secondary py-4">Belum ada transaksi manual.</div> : 
+                 manualTransactions.map(t => (
+                    <div key={t.id} className="bg-white p-3 rounded border border-gray-200 flex justify-between items-center">
+                        <div>
+                            <div className="font-bold text-gray-800">{t.description}</div>
+                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID')}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                                {t.type === 'in' ? '+' : '-'} {formatCurrency(t.amount)}
+                            </div>
+                            <button onClick={() => handleDeleteTransaction(t.id)} className="text-xs text-red-400 mt-1 bg-transparent border-0 p-0 cursor-pointer">Hapus</button>
+                        </div>
+                    </div>
+                 ))}
+            </div>
+        </div>
+    );
+  };
+
+  if (!isLoggedIn) {
+      return (
+        <div style={{height: '100%'}}>
+            <LoginView 
+                onLogin={handleLoginSuccess} 
+                installPrompt={installPrompt} 
+                onInstall={handleInstallClick}
+                isAppInstalled={isAppInstalled}
+            />
+        </div>
+      );
+  }
+
+  return (
+    <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
+        <div className="app-content">
+            {view === 'dashboard' && <DashboardView />}
+            {view === 'customers' && <CustomersView />}
+            {view === 'recording' && <RecordingView />}
+            {view === 'bills' && <BillsView />}
+            {view === 'cashbook' && <CashBookView />}
+        </div>
+    </div>
+  );
+};
+
+const container = document.getElementById('root');
+const root = createRoot(container!);
+root.render(<App />);
