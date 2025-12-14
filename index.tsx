@@ -287,28 +287,8 @@ const App = () => {
   const totalManualExpense = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
   const lifetimeBalance = (totalBillIncome + totalManualIncome) - totalManualExpense;
 
-  const handleBackupData = () => {
-      const backupData = {
-          exportDate: new Date().toISOString(),
-          stats: {
-              totalCustomers: customers.length,
-              balance: lifetimeBalance
-          },
-          customers: customers,
-          bills: bills,
-          transactions: manualTransactions
-      };
-
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-      const downloadAnchorNode = document.createElement('a');
-      downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", `pamsimas_backup_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchorNode); // required for firefox
-      downloadAnchorNode.click();
-      downloadAnchorNode.remove();
-  };
-
   const DashboardView = () => {
+    const [reportMonth, setReportMonth] = useState(getCurrentMonth());
     const currentMonth = getCurrentMonth();
     const monthBills = bills.filter(b => b.month === currentMonth);
     const totalCustomers = customers.length;
@@ -318,6 +298,80 @@ const App = () => {
 
     const paidCount = monthBills.filter(b => b.isPaid).length;
     const unpaidCount = monthBills.filter(b => !b.isPaid).length;
+
+    const handleDownloadReport = () => {
+        // 1. Filter data based on selected month (from dashboard state)
+        const billsInMonth = bills.filter(b => b.month === reportMonth);
+        const transactionsInMonth = manualTransactions.filter(t => new Date(t.date).toISOString().slice(0, 7) === reportMonth);
+        
+        // 2. Calculate Financial Summary
+        // Pemasukan: Tagihan Air Lunas + Manual Income
+        const waterIncome = billsInMonth.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0);
+        const manualIncome = transactionsInMonth.filter(t => t.type === 'in').reduce((sum, t) => sum + t.amount, 0);
+        const totalIncome = waterIncome + manualIncome;
+        
+        // Pengeluaran: Manual Expense
+        const totalExpense = transactionsInMonth.filter(t => t.type === 'out').reduce((sum, t) => sum + t.amount, 0);
+        
+        const balance = totalIncome - totalExpense;
+
+        // 3. Construct CSV Content
+        // Format: No;Nama;MeteranLama;MeteranBaru;JumlahTagihan;Denda;Tunggakan;Status
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // Header Keuangan
+        csvContent += `LAPORAN KEUANGAN PAMSIMAS\n`;
+        csvContent += `Periode;${getMonthName(reportMonth)}\n`;
+        csvContent += `Pemasukan (Air + Lainnya);${totalIncome}\n`;
+        csvContent += `Pengeluaran;${totalExpense}\n`;
+        csvContent += `Saldo Periode Ini;${balance}\n\n`;
+
+        // Table Header
+        csvContent += "No;Nama Pelanggan;Meteran Lama;Meteran Baru;Jumlah Tagihan;Denda;Tunggakan;Lunas/Belum\n";
+
+        // Table Rows (Sorted by Name)
+        const sortedBillsForReport = [...billsInMonth].sort((a, b) => {
+             const custA = customers.find(c => c.id === a.customerId)?.name || '';
+             const custB = customers.find(c => c.id === b.customerId)?.name || '';
+             return custA.localeCompare(custB);
+        });
+
+        sortedBillsForReport.forEach((b, index) => {
+            const cust = customers.find(c => c.id === b.customerId);
+            
+            // Logic Kolom
+            const jumlahTagihanMurni = b.details.beban + b.details.pakai;
+            const denda = b.details.denda;
+            
+            // Tunggakan: Jika belum lunas, maka total yang harus dibayar adalah tunggakan. Jika lunas, 0.
+            const tunggakan = !b.isPaid ? (jumlahTagihanMurni + denda) : 0;
+            const status = b.isPaid ? "Lunas" : "Belum Bayar";
+
+            // Format Baris CSV
+            const row = [
+                index + 1,
+                `"${cust?.name || 'Unknown'}"`,
+                b.prevReading,
+                b.currReading,
+                jumlahTagihanMurni,
+                denda,
+                tunggakan,
+                status
+            ].join(";");
+            
+            csvContent += row + "\n";
+        });
+
+        // 4. Download Trigger
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Laporan_Pamsimas_${reportMonth}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const MenuCard = ({ title, value, icon, color, onClick, subtext }: any) => (
       <button onClick={onClick} className={`card p-4 flex flex-col items-center justify-center text-center ${onClick ? 'cursor-pointer hover:bg-gray-50 active:scale-95' : 'cursor-default'} border-0 shadow-sm h-full w-full relative overflow-hidden transition-transform transform`}>
@@ -343,16 +397,28 @@ const App = () => {
           <MenuCard title="Buku Kas" value="Laporan" subtext="Lihat Detail" icon="assessment" color="#F59E0B" onClick={() => setView('cashbook')} />
         </div>
         
-        {/* Tombol Backup & Logout */}
+        {/* Tombol Download CSV (Menggantikan Backup) & Logout */}
         <div className="mt-4 flex flex-col items-center gap-3">
-            <button 
-                onClick={handleBackupData}
-                className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
-                style={{color: '#0288D1', fontSize: '0.75rem', fontWeight: 500}}
-            >
-                <span className="material-icons-round" style={{fontSize: '1rem'}}>cloud_download</span>
-                <span>Backup</span>
-            </button>
+             <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
+                {/* Month Picker for Report */}
+                <input 
+                    type="month" 
+                    className="text-sm border-none bg-transparent outline-none font-medium text-secondary cursor-pointer" 
+                    value={reportMonth} 
+                    onChange={e => setReportMonth(e.target.value)} 
+                    title="Pilih Bulan Laporan"
+                />
+                <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                {/* Download Button */}
+                <button 
+                    onClick={handleDownloadReport}
+                    className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-1"
+                    style={{color: '#10B981', fontSize: '0.85rem', fontWeight: 600}}
+                >
+                    <span className="material-icons-round" style={{fontSize: '1.2rem'}}>description</span>
+                    <span>Download Buku Kas</span>
+                </button>
+             </div>
 
              <button 
                 onClick={handleLogout}
@@ -659,6 +725,7 @@ const App = () => {
 
   const BillsView = () => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
 
     const togglePaid = async (billId: string) => {
         const bill = bills.find(b => b.id === billId);
@@ -743,6 +810,9 @@ const App = () => {
     const filteredBills = bills.filter(b => {
         const cust = customers.find(c => c.id === b.customerId);
         
+        // FILTER BY MONTH FIRST
+        if (b.month !== selectedMonth) return false;
+
         let matchStatus = true;
         if (billFilter === 'paid') matchStatus = b.isPaid;
         if (billFilter === 'unpaid') matchStatus = !b.isPaid;
@@ -764,6 +834,17 @@ const App = () => {
                 <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
             </div>
             
+            {/* MONTH FILTER (JUST FILTER, NO DOWNLOAD) */}
+            <div className="flex gap-2 mb-4">
+                 <input 
+                    type="month" 
+                    className="input-field" 
+                    style={{flex: 1}}
+                    value={selectedMonth} 
+                    onChange={e => setSelectedMonth(e.target.value)} 
+                />
+            </div>
+
             {/* SEARCH BAR */}
             <div className="mb-4">
                  <input className="input-field" placeholder="Cari nama pelanggan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
@@ -771,7 +852,7 @@ const App = () => {
 
             {/* REMOVED INFO BOX FROM HERE */}
 
-            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Belum ada data.</div> : <div className="flex flex-col gap-3">
+            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Tidak ada data untuk periode ini.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
                         const cust = customers.find(c => c.id === bill.customerId);
                         
@@ -827,228 +908,3 @@ const App = () => {
   };
 
   const CashBookView = () => {
-      const [showModal, setShowModal] = useState(false);
-      const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
-      const [currentPage, setCurrentPage] = useState(1);
-      const [newTx, setNewTx] = useState<{description: string, amount: string, type: 'in' | 'out', date: string}>({ description: '', amount: '', type: 'in', date: new Date().toISOString().slice(0, 10) });
-      const ITEMS_PER_PAGE = 5;
-
-      const handleAddTx = async () => {
-          if(!newTx.description || !newTx.amount) return;
-          const cleanAmount = Number(newTx.amount.replace(/\./g, ''));
-          
-          try {
-              await addDoc(collection(db, 'transactions'), {
-                  description: newTx.description,
-                  amount: cleanAmount,
-                  type: newTx.type,
-                  date: new Date(newTx.date).getTime(),
-                  isManual: true
-              });
-              setNewTx({ description: '', amount: '', type: 'in', date: new Date().toISOString().slice(0, 10) });
-              setShowModal(false);
-          } catch (error) {
-              console.error("Error add transaction:", error);
-              alert("Gagal menyimpan transaksi.");
-          }
-      };
-
-      const handleDeleteTx = async (id: string) => {
-        if(confirm('Hapus transaksi ini?')) {
-            try {
-                await deleteDoc(doc(db, 'transactions', id));
-            } catch (error) {
-                console.error("Error delete tx:", error);
-                alert("Gagal hapus transaksi.");
-            }
-        }
-      };
-
-      const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const val = e.target.value.replace(/\D/g, '');
-          setNewTx({...newTx, amount: formatNumberDots(val)});
-      };
-
-      const paidBillsAsTx: Transaction[] = bills.filter(b => b.isPaid).map(b => {
-          const cust = customers.find(c => c.id === b.customerId);
-          return {
-              id: b.id,
-              type: 'in',
-              description: `Tagihan Air: ${cust?.name || 'Pelanggan'}`,
-              amount: b.amount,
-              date: b.paidDate || b.dateCreated,
-              isManual: false,
-              sourceId: b.id
-          };
-      });
-
-      const allTransactions = [...manualTransactions, ...paidBillsAsTx].sort((a, b) => b.date - a.date);
-      const filteredTransactions = allTransactions.filter(t => new Date(t.date).toISOString().slice(0, 7) === selectedMonth);
-
-      const monthlyIncome = filteredTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
-      const monthlyExpense = filteredTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
-      const monthlyBalance = monthlyIncome - monthlyExpense;
-
-      const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
-      const paginatedTx = filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-      return (
-          <div className="relative h-full">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold m-0">Buku Kas</h2>
-                <button onClick={() => setView('dashboard')} style={{ color: '#0288D1' }} className="text-sm font-bold bg-transparent border-0 p-0 cursor-pointer">Kembali</button>
-            </div>
-
-            <div className="mb-4">
-                <input type="month" className="input-field" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setCurrentPage(1); }} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-4">
-                 <div>
-                     <div className="text-xs font-bold text-secondary mb-1 ml-1">Pemasukan</div>
-                     <div className="card p-2 m-0 border border-green-300 bg-green-50">
-                         <div className="text-lg font-bold text-green-600 text-right leading-tight">{formatCurrency(monthlyIncome)}</div>
-                     </div>
-                 </div>
-                 <div>
-                     <div className="text-xs font-bold text-secondary mb-1 ml-1">Pengeluaran</div>
-                     <div className="card p-2 m-0 border border-red-300 bg-red-50">
-                         <div className="text-lg font-bold text-red-600 text-right leading-tight">{formatCurrency(monthlyExpense)}</div>
-                     </div>
-                 </div>
-                 <div>
-                     <div className="text-xs font-bold text-secondary mb-1 ml-1">Saldo Bulan Ini</div>
-                     <div className="card p-2 m-0 border border-blue-200 bg-blue-50">
-                         <div className="text-lg font-bold text-primary text-right leading-tight">{formatCurrency(monthlyBalance)}</div>
-                     </div>
-                 </div>
-                 <div>
-                     <div className="text-xs font-bold text-transparent mb-1 ml-1 select-none">.</div>
-                     <button onClick={() => setShowModal(true)} className="card p-2 m-0 border border-gray-300 bg-white flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:scale-95 transition-transform w-full">
-                        <span className="material-icons-round text-primary" style={{fontSize: '1.25rem'}}>add_circle</span>
-                        <div className="text-xs font-bold text-primary">Tambah Transaksi</div>
-                    </button>
-                 </div>
-            </div>
-
-            <h3 className="font-bold text-lg m-0 mb-2">Riwayat Transaksi</h3>
-
-            <div className="flex flex-col gap-2 pb-20">
-                {paginatedTx.length === 0 ? <div className="text-center text-secondary py-4">Belum ada transaksi bulan ini.</div> : paginatedTx.map(t => (
-                    <div key={t.id} className="card p-3 mb-0 flex justify-between items-center">
-                        <div>
-                            <div className="font-bold text-sm text-primary capitalize">{t.description}</div>
-                            <div className="text-xs text-secondary">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {t.isManual ? 'Manual' : 'Otomatis'}</div>
-                        </div>
-                        <div className="text-right">
-                             <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
-                                {t.type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
-                             </div>
-                             {t.isManual && (
-                                <button onClick={() => handleDeleteTx(t.id)} className="text-xs text-red-400 bg-transparent border-0 p-0 cursor-pointer mt-1">Hapus</button>
-                             )}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {totalPages > 1 && (
-                <div className="flex justify-between items-center mt-4 pb-4">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn btn-secondary" style={{width: 'auto', padding: '0.5rem 1rem'}}>Prev</button>
-                    <span className="text-sm text-secondary">Halaman {currentPage} / {totalPages}</span>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="btn btn-secondary" style={{width: 'auto', padding: '0.5rem 1rem'}}>Next</button>
-                </div>
-            )}
-
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" style={{backgroundColor: 'rgba(0,0,0,0.5)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                    <div className="card w-full max-w-sm animate-fade-in" style={{margin: 0}}>
-                        <h3 className="text-lg font-bold mb-4">Tambah Transaksi</h3>
-                        <div className="input-group">
-                            <label>Keterangan</label>
-                            <input className="input-field" value={newTx.description} onChange={e => setNewTx({...newTx, description: e.target.value})} placeholder="Contoh: Beli Pipa" />
-                        </div>
-                        <div className="input-group">
-                            <label>Jenis</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button onClick={() => setNewTx({...newTx, type: 'in'})} className={`btn ${newTx.type === 'in' ? 'bg-green-100 text-green-800 border-green-300' : 'btn-secondary'}`} style={{backgroundColor: newTx.type === 'in' ? '#dcfce7' : '', color: newTx.type === 'in' ? '#166534' : ''}}>Pemasukan</button>
-                                <button onClick={() => setNewTx({...newTx, type: 'out'})} className={`btn ${newTx.type === 'out' ? 'bg-red-100 text-red-800 border-red-300' : 'btn-secondary'}`} style={{backgroundColor: newTx.type === 'out' ? '#fee2e2' : '', color: newTx.type === 'out' ? '#991b1b' : ''}}>Pengeluaran</button>
-                            </div>
-                        </div>
-                        <div className="input-group">
-                            <label>Jumlah (Rp)</label>
-                            <input className="input-field text-right" type="text" inputMode="numeric" value={newTx.amount} onChange={handleAmountChange} placeholder="0" />
-                        </div>
-                        <div className="input-group">
-                            <label>Tanggal</label>
-                            <input type="date" className="input-field" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} />
-                        </div>
-                        <div className="flex gap-2 mt-4">
-                            <button onClick={() => setShowModal(false)} className="btn btn-secondary">Batal</button>
-                            <button onClick={handleAddTx} className="btn">Simpan</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-          </div>
-      );
-  };
-
-  // --- Main Render ---
-  if (!isLoggedIn) {
-      return (
-        <LoginView 
-            onLogin={handleLoginSuccess} 
-            installPrompt={installPrompt} 
-            onInstall={handleInstallClick} 
-            isAppInstalled={isAppInstalled}
-        />
-      );
-  }
-  
-  // Show loading indicator when first fetching data
-  if (isLoading && customers.length === 0 && bills.length === 0) {
-      return (
-          <div style={{height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column'}}>
-              <div className="font-bold text-primary text-xl mb-2">Memuat Data...</div>
-              <div className="text-secondary text-sm">Menghubungkan ke server</div>
-          </div>
-      );
-  }
-
-  return (
-    <>
-      <header className="app-header" style={{flexDirection: 'column', justifyContent: 'center', textAlign: 'center', height: 'auto', padding: '1rem 1rem', position: 'relative'}}>
-        <h1 className="text-xl font-bold m-0 leading-none mb-1 mt-2">PAMSIMAS PUNGKURAN</h1>
-        <div className="flex flex-col justify-center items-center leading-none">
-            <div className="text-sm opacity-90 font-medium">PUNGKURAN KWANGSAN JUMAPOLO</div>
-            <div className="text-sm opacity-90 font-medium">KARANGANYAR</div>
-        </div>
-      </header>
-
-      <main className="app-content">
-        {view === 'dashboard' && <DashboardView />}
-        {view === 'customers' && <CustomersView />}
-        {view === 'recording' && <RecordingView />}
-        {view === 'bills' && <BillsView />}
-        {view === 'cashbook' && <CashBookView />}
-      </main>
-
-      <footer className="app-footer">copyright admin.pampunk 2026</footer>
-      
-      {/* Tombol Floating Install khusus di Dashboard jika belum diinstall */}
-      {installPrompt && isLoggedIn && !isAppInstalled && (
-          <button 
-              onClick={handleInstallClick}
-              className="install-fab"
-          >
-              <span className="material-icons-round">install_mobile</span>
-              Install Aplikasi
-          </button>
-      )}
-    </>
-  );
-};
-
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);

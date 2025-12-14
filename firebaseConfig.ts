@@ -1,4 +1,4 @@
-import * as firebaseApp from "firebase/app";
+import firebase from "firebase/compat/app";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 
 // --- KONFIGURASI FIREBASE ---
@@ -13,8 +13,11 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = firebaseApp.initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Use compat initialization to resolve 'initializeApp' export issues in some environments
+firebase.initializeApp(firebaseConfig);
+
+// Use getFirestore() to get the default Firestore instance
+const db = getFirestore();
 
 // Aktifkan Offline Persistence (Agar data tetap bisa dibaca saat internet mati)
 // Data akan disinkronkan kembali saat online.
