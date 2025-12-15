@@ -1117,6 +1117,20 @@ const App = () => {
 
   return (
     <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
+        {/* Header Fixed */}
+        <header className="app-header" style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0px', paddingBottom: '1rem' }}>
+            <div className="flex items-center gap-2 mb-1">
+                 <div className="font-bold tracking-tight" style={{ fontSize: '18px', lineHeight: '1.2' }}>PAMSIMAS PUNGKURAN</div>
+            </div>
+            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2', opacity: 1 }}>
+                KWANGSAN JUMAPOLO
+            </div>
+            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2', opacity: 1 }}>
+                KARANGANYAR
+            </div>
+        </header>
+
+        {/* Scrollable Content */}
         <div className="app-content">
             {view === 'dashboard' && <DashboardView />}
             {view === 'customers' && <CustomersView />}
@@ -1124,6 +1138,11 @@ const App = () => {
             {view === 'bills' && <BillsView bills={bills} customers={customers} billFilter={billFilter} setView={setView} />}
             {view === 'cashbook' && <CashBookView />}
         </div>
+        
+        {/* Footer Fixed */}
+        <footer className="app-footer">
+            &copy; 2026 copyright pampunk
+        </footer>
     </div>
   );
 };
