@@ -14,7 +14,6 @@ import {
     orderBy,
     deleteDoc
 } from '@firebase/firestore';
-import { GoogleGenAI } from "@google/genai";
 
 // --- Types & Interfaces ---
 interface Customer {
@@ -478,30 +477,6 @@ const App = () => {
     const paidCount = monthBills.filter(b => b.isPaid).length;
     const unpaidCount = monthBills.filter(b => !b.isPaid).length;
 
-    // Fixed: Added Gemini AI analysis for financial summary.
-    const handleAISummary = async () => {
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `Anda adalah asisten AI untuk pengelola PAMSIMAS Pungkuran Kwangsan. 
-            Berikan analisa singkat dalam Bahasa Indonesia mengenai data keuangan bulan ${currentMonth} ini:
-            - Total Pelanggan: ${totalCustomers}
-            - Sudah Bayar: ${paidCount}
-            - Belum Bayar: ${unpaidCount}
-            - Saldo Kas Akhir: ${formatCurrency(lifetimeBalance)}
-            - Total Penggunaan Air: ${usageThisMonth} m3
-            Berikan saran praktis untuk meningkatkan efisiensi penagihan atau penggunaan air.`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-            });
-            alert("Analisa AI:\n\n" + response.text);
-        } catch (error) {
-            console.error("Gemini AI Error:", error);
-            alert("Maaf, gagal mendapatkan analisa AI.");
-        }
-    };
-
     const MenuCard = ({ title, value, icon, color, onClick, subtext }: any) => (
       <button onClick={onClick} className={`card p-4 flex flex-col items-center justify-center text-center ${onClick ? 'cursor-pointer hover:bg-gray-50 active:scale-95' : 'cursor-default'} border-0 shadow-sm h-full w-full relative overflow-hidden transition-transform transform`}>
         <div className={`absolute top-0 left-0 w-1 h-full`} style={{ backgroundColor: color }}></div>
@@ -527,14 +502,6 @@ const App = () => {
         </div>
         
         <div className="mt-4 flex flex-col items-center gap-3">
-             <button 
-                onClick={handleAISummary}
-                className="btn"
-                style={{backgroundColor: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: 'auto', padding: '0.6rem 2rem'}}
-            >
-                <span className="material-icons-round">psychology</span>
-                <span>Analisa AI</span>
-            </button>
              <button 
                 onClick={handleLogout}
                 className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
@@ -873,6 +840,7 @@ const App = () => {
     const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
     const [showForm, setShowForm] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [activeDetailType, setActiveDetailType] = useState<'all' | 'in' | 'out'>('all');
     const itemsPerPage = 10;
 
     const handleDownloadReport = () => {
@@ -1000,16 +968,42 @@ const App = () => {
         };
     });
 
-    const allTransactions = [...manualTxns, ...paidBillTxns]
-        .filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
-        .sort((a, b) => b.sortDate - a.sortDate);
+    // Filtering logic based on activeDetailType
+    let displayTransactions: any[] = [];
+    
+    if (activeDetailType === 'in') {
+        const manualIn = manualTxns.filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth);
+        const billInTotal = paidBillTxns.filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
+                                       .reduce((sum, t) => sum + t.amount, 0);
+        
+        displayTransactions = [...manualIn];
+        if (billInTotal > 0) {
+            displayTransactions.push({
+                id: 'aggregated-bills',
+                type: 'in',
+                description: 'Total Tagihan Air',
+                amount: billInTotal,
+                sortDate: Date.now(), 
+                isManual: false,
+                source: 'aggregated'
+            });
+        }
+        displayTransactions.sort((a, b) => b.sortDate - a.sortDate);
+    } else if (activeDetailType === 'out') {
+        displayTransactions = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
+                                        .sort((a, b) => b.sortDate - a.sortDate);
+    } else {
+        displayTransactions = [...manualTxns, ...paidBillTxns]
+            .filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
+            .sort((a, b) => b.sortDate - a.sortDate);
+    }
 
-    const totalInMonth = allTransactions.filter(t => t.type === 'in').reduce((sum, t) => sum + t.amount, 0);
-    const totalOutMonth = allTransactions.filter(t => t.type === 'out').reduce((sum, t) => sum + t.amount, 0);
+    const totalInMonth = [...manualTxns, ...paidBillTxns].filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
+    const totalOutMonth = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
     const balanceMonth = totalInMonth - totalOutMonth;
 
-    const totalPages = Math.ceil(allTransactions.length / itemsPerPage);
-    const paginatedTransactions = allTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const totalPages = Math.ceil(displayTransactions.length / itemsPerPage);
+    const paginatedTransactions = displayTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const handleNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
     const handlePrev = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
@@ -1026,11 +1020,25 @@ const App = () => {
             </div>
 
             <div className="flex flex-col gap-4 mb-6">
-                <div className="p-4 rounded flex justify-between items-center shadow-sm" style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <div 
+                    onClick={() => { setActiveDetailType(activeDetailType === 'in' ? 'all' : 'in'); setCurrentPage(1); }}
+                    className="p-4 rounded flex justify-between items-center shadow-sm cursor-pointer transition-all" 
+                    style={{ 
+                        backgroundColor: '#f0fdf4', 
+                        border: activeDetailType === 'in' ? '2px solid #16a34a' : '1px solid #bbf7d0',
+                        transform: activeDetailType === 'in' ? 'scale(1.02)' : 'scale(1)'
+                    }}>
                     <div className="text-green-800 font-bold text-lg">Pemasukan</div>
                     <div className="text-green-600 font-bold text-lg">{formatCurrency(totalInMonth)}</div>
                 </div>
-                <div className="p-4 rounded flex justify-between items-center shadow-sm" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
+                <div 
+                    onClick={() => { setActiveDetailType(activeDetailType === 'out' ? 'all' : 'out'); setCurrentPage(1); }}
+                    className="p-4 rounded flex justify-between items-center shadow-sm cursor-pointer transition-all" 
+                    style={{ 
+                        backgroundColor: '#fef2f2', 
+                        border: activeDetailType === 'out' ? '2px solid #dc2626' : '1px solid #fecaca',
+                        transform: activeDetailType === 'out' ? 'scale(1.02)' : 'scale(1)'
+                    }}>
                     <div className="text-red-800 font-bold text-lg">Pengeluaran</div>
                     <div className="text-red-600 font-bold text-lg">{formatCurrency(totalOutMonth)}</div>
                 </div>
@@ -1080,14 +1088,24 @@ const App = () => {
                 </div>
             )}
 
-            <h3 className="text-sm font-bold text-secondary uppercase mb-2">Riwayat Transaksi</h3>
+            <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-bold text-secondary uppercase m-0">
+                    {activeDetailType === 'in' ? 'Rincian Pemasukan' : activeDetailType === 'out' ? 'Rincian Pengeluaran' : 'Riwayat Transaksi'}
+                </h3>
+                {activeDetailType !== 'all' && (
+                    <button onClick={() => setActiveDetailType('all')} className="text-xs text-primary font-bold bg-transparent border-0 cursor-pointer">Lihat Semua</button>
+                )}
+            </div>
+            
             <div className="flex flex-col gap-2 pb-6">
                 {paginatedTransactions.length === 0 ? <div className="text-center text-sm text-secondary py-4">Belum ada transaksi di bulan ini.</div> : 
                  paginatedTransactions.map((t, idx) => (
                     <div key={`${t.id}-${idx}`} className="bg-white p-3 rounded border border-gray-200 flex justify-between items-center shadow-sm">
                         <div style={{maxWidth: '65%'}}>
                             <div className="font-bold text-gray-800 text-sm">{toTitleCase(t.description)}</div>
-                            <div className="text-xs text-secondary mt-1">{new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                            <div className="text-xs text-secondary mt-1">
+                                {t.id === 'aggregated-bills' ? 'Total bulan ini' : new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </div>
                         </div>
                         <div className="text-right">
                             <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
