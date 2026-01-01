@@ -1,6 +1,5 @@
 
-// Use the modular Firebase SDK instead of the compat version to avoid export conflicts.
-// Fixed: Using scoped @firebase packages to ensure named exports are correctly resolved in this environment.
+// Use the modular Firebase SDK.
 import { initializeApp } from "@firebase/app";
 import { getFirestore, enableIndexedDbPersistence } from "@firebase/firestore";
 
@@ -22,7 +21,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Aktifkan Offline Persistence (Agar data tetap bisa dibaca saat internet mati)
-// Data akan disinkronkan kembali saat online.
 try {
     enableIndexedDbPersistence(db).catch((err) => {
         if (err.code == 'failed-precondition') {

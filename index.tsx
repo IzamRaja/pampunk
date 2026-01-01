@@ -2,8 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from './firebaseConfig';
-// Standard modular imports for Firestore (v9+).
-// Fixed: Using scoped @firebase/firestore package to resolve "no exported member" errors.
 import { 
     collection, 
     addDoc, 
@@ -146,7 +144,7 @@ const LoginView = ({
                     
                     {installPrompt && (
                         <div className="text-center pt-4 border-t border-gray-200 animate-fade-in mb-4">
-                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia for diinstall</div>
+                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia untuk diinstall</div>
                              <button 
                                 type="button" 
                                 onClick={onInstall} 
@@ -167,7 +165,7 @@ const LoginView = ({
     );
 };
 
-// --- Bills Component (Extracted) ---
+// --- Bills Component ---
 const BillsView = ({ 
     bills, 
     customers, 
@@ -277,7 +275,7 @@ const BillsView = ({
                  <input className="input-field" placeholder="Cari nama pelanggan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
             </div>
 
-            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Tidak ada data for periode ini.</div> : <div className="flex flex-col gap-3">
+            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Tidak ada data untuk periode ini.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
                         const cust = customers.find(c => c.id === bill.customerId);
                         const currentMonthStr = getCurrentMonth();
@@ -289,14 +287,12 @@ const BillsView = ({
                             b.dateCreated < bill.dateCreated
                         ).sort((a, b) => a.month.localeCompare(b.month));
                         
-                        // LOGIKA USER: Tunggakan = Pokok Semua + Denda Lama
                         const totalPokokPast = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
                         const totalDendaPast = (unpaidPrevious.length > 1 && cust?.type !== 'Sosial') 
                                                 ? (unpaidPrevious.length - 1) * BIAYA_DENDA 
                                                 : 0;
                         const tunggakanDisplay = totalPokokPast + totalDendaPast;
 
-                        // Denda Baru = Denda dari bulan paling akhir yang telat
                         let dendaBaruDisplay = 0;
                         if (!bill.isPaid) {
                             if (bill.month < currentMonthStr && cust?.type !== 'Sosial') {
@@ -324,7 +320,7 @@ const BillsView = ({
                                                 {new Date(bill.dateCreated).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}
                                             </div>
                                         </div>
-                                        <div>
+                                        <div className="flex gap-2">
                                             {bill.isPaid ? (
                                                 <button onClick={() => togglePaid(bill.id)} className="bg-transparent border-0 cursor-pointer flex items-center justify-center p-1" style={{color: '#EF4444'}} title="Batalkan Lunas">
                                                      <span className="material-icons-round" style={{fontSize: '24px'}}>cancel</span>
@@ -394,7 +390,6 @@ const App = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [manualTransactions, setManualTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   const handleLoginSuccess = () => {
       localStorage.setItem('pamsimas_auth', 'true');
@@ -453,7 +448,6 @@ const App = () => {
     const unsubTrans = onSnapshot(qTrans, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Transaction[];
         setManualTransactions(data);
-        setIsLoading(false);
     });
 
     return () => {
@@ -676,34 +670,23 @@ const App = () => {
     const currReadingNum = Number(currentReading);
     const usage = currReadingNum >= prevReading ? currReadingNum - prevReading : 0;
     
-    // Tentukan Tarif
     const tarifPerM3 = customer.type === 'Bisnis' ? TARIF_BISNIS : customer.type === 'Sosial' ? TARIF_SOSIAL : TARIF_UMUM;
     const biayaPakai = usage * tarifPerM3;
     
-    // ANALOGI USER:
-    // 1. Ambil semua tagihan yang belum lunas
     const unpaidBills = bills.filter(b => b.customerId === customer.id && !b.isPaid)
                              .sort((a, b) => a.month.localeCompare(b.month));
     
     const currentMonthStr = getCurrentMonth();
-    
-    // LOGIKA PERHITUNGAN:
-    // - newestDenda: Denda untuk tagihan bulan lalu yang baru telat.
-    // - arrearsTotal: Semua Pokok dari bulan-bulan telat + Denda lama.
     let arrearsTotal = 0;
     let newestDenda = 0;
 
     if (unpaidBills.length > 0) {
-        // Tagihan paling akhir yang telat (bulan kemarin)
         const latestUnpaid = unpaidBills[unpaidBills.length - 1];
         if (latestUnpaid.month < currentMonthStr && customer.type !== 'Sosial') {
             newestDenda = BIAYA_DENDA;
         }
 
-        // Semua Pokok yang telat
         const totalPokokPast = unpaidBills.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
-        
-        // Denda dari tagihan-tagihan sebelum bulan kemarin (Denda Lama)
         const dendaLama = (unpaidBills.length > 1 && customer.type !== 'Sosial') 
                            ? (unpaidBills.length - 1) * BIAYA_DENDA 
                            : 0;
@@ -765,7 +748,7 @@ const App = () => {
                 }
 
                 message += `*TOTAL TAGIHAN: ${formatCurrency(totalToPay)}*\n\n`;
-                message += `_Lakukan pembayaran sebelum tanggal 10 for menghindari denda._\n\n`;
+                message += `_Lakukan pembayaran sebelum tanggal 10 untuk menghindari denda._\n\n`;
                 message += `_Terima kasih._`;
 
                 window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
@@ -820,7 +803,7 @@ const App = () => {
                     </div>
                     <div className="flex justify-between items-center border-t border-gray-300 pt-2 mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
                 </div>
-                {currReadingNum < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">⚠️ Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
+                {Number(currentReading) < prevReading && currentReading !== '' && <div className="text-red-500 text-sm mb-4 text-center bg-red-50 p-2 rounded">⚠️ Meteran baru tidak boleh lebih kecil dari meteran lama.</div>}
                 <div className="flex flex-col gap-3">
                      <button onClick={() => handleSave(hasPhone)} disabled={!isValid || isSaving} className={`btn ${!isValid ? 'opacity-50 cursor-not-allowed' : ''}`} style={{backgroundColor: '#10B981'}}>
                         <span className="material-icons-round">{isSaving ? 'hourglass_empty' : (hasPhone ? 'send' : 'save')}</span>
@@ -846,64 +829,43 @@ const App = () => {
     const handleDownloadReport = () => {
         const billsInMonth = bills.filter(b => b.month === selectedMonth);
         const transactionsInMonth = manualTransactions.filter(t => new Date(t.date).toISOString().slice(0, 7) === selectedMonth);
-        
-        // 1. Calculate Income (Month)
         const waterIncome = billsInMonth.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0);
         const incomeTxns = transactionsInMonth.filter(t => t.type === 'in');
         const manualIncomeTotal = incomeTxns.reduce((sum, t) => sum + t.amount, 0);
         const totalIncome = waterIncome + manualIncomeTotal;
-        
-        // 2. Calculate Expense (Month)
         const expenseTxns = transactionsInMonth.filter(t => t.type === 'out');
         const totalExpense = expenseTxns.reduce((sum, t) => sum + t.amount, 0);
-        
-        // 3. Balance (Month)
         const balance = totalIncome - totalExpense;
-
-        // 4. Calculate Lifetime Balance
         const totalBillIncomeLifetime = bills.filter(b => b.isPaid).reduce((acc, b) => acc + b.amount, 0);
         const totalManualIncomeLifetime = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
         const totalManualExpenseLifetime = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
         const lifetimeBalance = (totalBillIncomeLifetime + totalManualIncomeLifetime) - totalManualExpenseLifetime;
-
         const fmt = (num: number) => `Rp ${new Intl.NumberFormat('id-ID').format(num)}`;
-
         let csvContent = "data:text/csv;charset=utf-8,";
         csvContent += "LAPORAN KEUANGAN PAMSIMAS PUNGKURAN\n";
         csvContent += `Periode;${getMonthName(selectedMonth)}\n\n`;
-
         csvContent += "PEMASUKAN\n";
         csvContent += `1. Total Tagihan Pelanggan;${fmt(waterIncome)}\n`;
-        incomeTxns.forEach((t, idx) => {
-            csvContent += `${idx + 2}. ${t.description} (Manual);${fmt(t.amount)}\n`;
-        });
+        incomeTxns.forEach((t, idx) => { csvContent += `${idx + 2}. ${t.description} (Manual);${fmt(t.amount)}\n`; });
         csvContent += `TOTAL PEMASUKAN;${fmt(totalIncome)}\n\n`;
-
         csvContent += "PENGELUARAN\n";
-        expenseTxns.forEach((t, idx) => {
-            csvContent += `${idx + 1}. ${t.description};${fmt(t.amount)}\n`;
-        });
+        expenseTxns.forEach((t, idx) => { csvContent += `${idx + 1}. ${t.description};${fmt(t.amount)}\n`; });
         csvContent += `TOTAL PENGELUARAN;${fmt(totalExpense)}\n\n`;
-
         csvContent += `SALDO PERIODE INI;${fmt(balance)}\n`;
         csvContent += `TOTAL SALDO (SEMUA PERIODE);${fmt(lifetimeBalance)}\n\n`;
-        
         csvContent += "RINCIAN TAGIHAN PELANGGAN\n";
         csvContent += "No;Nama Pelanggan;Meteran Lama;Meteran Baru;Jumlah Tagihan;Denda;Tunggakan;Status\n";
-
         const sortedBillsForReport = [...billsInMonth].sort((a, b) => {
              const custA = customers.find(c => c.id === a.customerId)?.name || '';
              const custB = customers.find(c => c.id === b.customerId)?.name || '';
              return custA.localeCompare(custB);
         });
-
         sortedBillsForReport.forEach((b, index) => {
             const cust = customers.find(c => c.id === b.customerId);
             const custName = toTitleCase(cust?.name || 'Unknown');
             const row = [index + 1, `"${custName}"`, b.prevReading, b.currReading, fmt(b.details.beban + b.details.pakai), fmt(b.details.denda), b.isPaid ? "Rp 0" : fmt(b.amount), b.isPaid ? "Lunas" : "Belum Bayar"].join(";");
             csvContent += row + "\n";
         });
-
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
@@ -946,20 +908,14 @@ const App = () => {
         }
     };
 
-    const manualTxns = manualTransactions.map(t => ({
-        ...t,
-        source: 'manual',
-        sortDate: t.date 
-    }));
-
+    const manualTxns = manualTransactions.map(t => ({ ...t, source: 'manual', sortDate: t.date }));
     const paidBillTxns = bills.filter(b => b.isPaid).map(b => {
         const cust = customers.find(c => c.id === b.customerId);
         const name = cust?.name || 'Unknown';
-        const descTitleCase = `Tagihan ${toTitleCase(name)}`;
         return {
             id: b.id,
             type: 'in' as 'in',
-            description: descTitleCase,
+            description: `Tagihan ${toTitleCase(name)}`,
             amount: b.amount,
             date: b.paidDate || b.dateCreated,
             sortDate: b.paidDate || b.dateCreated,
@@ -968,34 +924,19 @@ const App = () => {
         };
     });
 
-    // Filtering logic based on activeDetailType
     let displayTransactions: any[] = [];
-    
     if (activeDetailType === 'in') {
         const manualIn = manualTxns.filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth);
-        const billInTotal = paidBillTxns.filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
-                                       .reduce((sum, t) => sum + t.amount, 0);
-        
+        const billInTotal = paidBillTxns.filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
         displayTransactions = [...manualIn];
         if (billInTotal > 0) {
-            displayTransactions.push({
-                id: 'aggregated-bills',
-                type: 'in',
-                description: 'Total Tagihan Air',
-                amount: billInTotal,
-                sortDate: Date.now(), 
-                isManual: false,
-                source: 'aggregated'
-            });
+            displayTransactions.push({ id: 'aggregated-bills', type: 'in', description: 'Total Tagihan Air', amount: billInTotal, sortDate: Date.now(), isManual: false, source: 'aggregated' });
         }
         displayTransactions.sort((a, b) => b.sortDate - a.sortDate);
     } else if (activeDetailType === 'out') {
-        displayTransactions = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
-                                        .sort((a, b) => b.sortDate - a.sortDate);
+        displayTransactions = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).sort((a, b) => b.sortDate - a.sortDate);
     } else {
-        displayTransactions = [...manualTxns, ...paidBillTxns]
-            .filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth)
-            .sort((a, b) => b.sortDate - a.sortDate);
+        displayTransactions = [...manualTxns, ...paidBillTxns].filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).sort((a, b) => b.sortDate - a.sortDate);
     }
 
     const totalInMonth = [...manualTxns, ...paidBillTxns].filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
@@ -1004,9 +945,6 @@ const App = () => {
 
     const totalPages = Math.ceil(displayTransactions.length / itemsPerPage);
     const paginatedTransactions = displayTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-    const handleNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
-    const handlePrev = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
 
     return (
         <div>
@@ -1023,22 +961,14 @@ const App = () => {
                 <div 
                     onClick={() => { setActiveDetailType(activeDetailType === 'in' ? 'all' : 'in'); setCurrentPage(1); }}
                     className="p-4 rounded flex justify-between items-center shadow-sm cursor-pointer transition-all" 
-                    style={{ 
-                        backgroundColor: '#f0fdf4', 
-                        border: activeDetailType === 'in' ? '2px solid #16a34a' : '1px solid #bbf7d0',
-                        transform: activeDetailType === 'in' ? 'scale(1.02)' : 'scale(1)'
-                    }}>
+                    style={{ backgroundColor: '#f0fdf4', border: activeDetailType === 'in' ? '2px solid #16a34a' : '1px solid #bbf7d0', transform: activeDetailType === 'in' ? 'scale(1.02)' : 'scale(1)' }}>
                     <div className="text-green-800 font-bold text-lg">Pemasukan</div>
                     <div className="text-green-600 font-bold text-lg">{formatCurrency(totalInMonth)}</div>
                 </div>
                 <div 
                     onClick={() => { setActiveDetailType(activeDetailType === 'out' ? 'all' : 'out'); setCurrentPage(1); }}
                     className="p-4 rounded flex justify-between items-center shadow-sm cursor-pointer transition-all" 
-                    style={{ 
-                        backgroundColor: '#fef2f2', 
-                        border: activeDetailType === 'out' ? '2px solid #dc2626' : '1px solid #fecaca',
-                        transform: activeDetailType === 'out' ? 'scale(1.02)' : 'scale(1)'
-                    }}>
+                    style={{ backgroundColor: '#fef2f2', border: activeDetailType === 'out' ? '2px solid #dc2626' : '1px solid #fecaca', transform: activeDetailType === 'out' ? 'scale(1.02)' : 'scale(1)' }}>
                     <div className="text-red-800 font-bold text-lg">Pengeluaran</div>
                     <div className="text-red-600 font-bold text-lg">{formatCurrency(totalOutMonth)}</div>
                 </div>
@@ -1121,11 +1051,11 @@ const App = () => {
 
             {totalPages > 1 && (
                 <div className="flex justify-center items-center gap-4 pb-20">
-                    <button onClick={handlePrev} disabled={currentPage === 1} className={`p-2 rounded-full border ${currentPage === 1 ? 'text-gray-300 border-gray-200' : 'text-primary border-primary bg-white'}`}>
+                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className={`p-2 rounded-full border ${currentPage === 1 ? 'text-gray-300 border-gray-200' : 'text-primary border-primary bg-white'}`}>
                         <span className="material-icons-round">chevron_left</span>
                     </button>
                     <span className="text-sm text-secondary font-medium">Hal {currentPage} dari {totalPages}</span>
-                    <button onClick={handleNext} disabled={currentPage === totalPages} className={`p-2 rounded-full border ${currentPage === totalPages ? 'text-gray-300 border-gray-200' : 'text-primary border-primary bg-white'}`}>
+                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className={`p-2 rounded-full border ${currentPage === totalPages ? 'text-gray-300 border-gray-200' : 'text-primary border-primary bg-white'}`}>
                         <span className="material-icons-round">chevron_right</span>
                     </button>
                 </div>
@@ -1135,21 +1065,15 @@ const App = () => {
   };
 
   if (!isLoggedIn) {
-      return (
-        <div style={{height: '100%'}}>
-            <LoginView onLogin={handleLoginSuccess} installPrompt={installPrompt} onInstall={handleInstallClick} isAppInstalled={isAppInstalled} />
-        </div>
-      );
+      return <LoginView onLogin={handleLoginSuccess} installPrompt={installPrompt} onInstall={handleInstallClick} isAppInstalled={isAppInstalled} />;
   }
 
   return (
     <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-        <header className="app-header" style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0px', paddingBottom: '1rem' }}>
-            <div className="flex items-center gap-2 mb-1">
-                 <div className="font-bold tracking-tight" style={{ fontSize: '18px', lineHeight: '1.2' }}>PAMSIMAS PUNGKURAN</div>
-            </div>
-            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2' }}>KWANGSAN JUMAPOLO</div>
-            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2' }}>KARANGANYAR</div>
+        <header className="app-header" style={{ flexDirection: 'column', paddingBottom: '1rem' }}>
+            <div className="font-bold tracking-tight" style={{ fontSize: '18px' }}>PAMSIMAS PUNGKURAN</div>
+            <div className="font-bold" style={{ fontSize: '14px' }}>KWANGSAN JUMAPOLO</div>
+            <div className="font-bold" style={{ fontSize: '14px' }}>KARANGANYAR</div>
         </header>
 
         <div className="app-content">
