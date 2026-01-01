@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from './firebaseConfig';
+// Standard modular imports for Firestore (v9+).
+// Fixed: Using scoped @firebase/firestore package to resolve "no exported member" errors.
 import { 
     collection, 
     addDoc, 
@@ -11,7 +13,8 @@ import {
     query, 
     orderBy,
     deleteDoc
-} from 'firebase/firestore';
+} from '@firebase/firestore';
+import { GoogleGenAI } from "@google/genai";
 
 // --- Types & Interfaces ---
 interface Customer {
@@ -144,7 +147,7 @@ const LoginView = ({
                     
                     {installPrompt && (
                         <div className="text-center pt-4 border-t border-gray-200 animate-fade-in mb-4">
-                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia untuk diinstall</div>
+                             <div className="text-xs text-secondary mb-2">Aplikasi tersedia for diinstall</div>
                              <button 
                                 type="button" 
                                 onClick={onInstall} 
@@ -193,9 +196,7 @@ const BillsView = ({
 
             if (isNowPaid) {
                  const currentMonthStr = getCurrentMonth();
-                 // Denda diterapkan pada bulan berikutnya jika bukan tipe Sosial
                  if (bill.month < currentMonthStr) {
-                     // SOSIAL: Denda tetap 0
                      if (customer && customer.type === 'Sosial') {
                          denda = 0;
                      } else {
@@ -230,7 +231,6 @@ const BillsView = ({
 
                     message += `Rincian Pembayaran:\n`;
                     message += `Tipe: ${customer.type}\n`;
-                    // FIX: Changed 'month' to 'm' which is the variable name used in the destructuring assignment on line 235.
                     const [y, m] = bill.month.split('-');
                     const period = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
                     message += `Periode: ${period}\n`;
@@ -278,33 +278,36 @@ const BillsView = ({
                  <input className="input-field" placeholder="Cari nama pelanggan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} autoComplete="off" />
             </div>
 
-            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Tidak ada data untuk periode ini.</div> : <div className="flex flex-col gap-3">
+            {sortedBills.length === 0 ? <div className="text-center text-secondary py-10">Tidak ada data for periode ini.</div> : <div className="flex flex-col gap-3">
                     {sortedBills.map(bill => {
                         const cust = customers.find(c => c.id === bill.customerId);
                         const currentMonthStr = getCurrentMonth();
                         const baseAmount = bill.details.beban + bill.details.pakai;
                         
-                        // Calculate Arrears (Tunggakan)
-                        const arrears = bills.filter(b => 
+                        const unpaidPrevious = bills.filter(b => 
                             b.customerId === bill.customerId && 
                             !b.isPaid && 
                             b.dateCreated < bill.dateCreated
-                        ).reduce((sum, b) => sum + b.amount, 0);
+                        ).sort((a, b) => a.month.localeCompare(b.month));
+                        
+                        // LOGIKA USER: Tunggakan = Pokok Semua + Denda Lama
+                        const totalPokokPast = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
+                        const totalDendaPast = (unpaidPrevious.length > 1 && cust?.type !== 'Sosial') 
+                                                ? (unpaidPrevious.length - 1) * BIAYA_DENDA 
+                                                : 0;
+                        const tunggakanDisplay = totalPokokPast + totalDendaPast;
 
-                        let displayDenda = 0;
+                        // Denda Baru = Denda dari bulan paling akhir yang telat
+                        let dendaBaruDisplay = 0;
                         if (!bill.isPaid) {
-                            if (bill.month < currentMonthStr) {
-                                if (cust && cust.type === 'Sosial') {
-                                    displayDenda = 0;
-                                } else {
-                                    displayDenda = BIAYA_DENDA;
-                                }
+                            if (bill.month < currentMonthStr && cust?.type !== 'Sosial') {
+                                dendaBaruDisplay = BIAYA_DENDA;
                             }
                         } else {
-                            displayDenda = bill.details.denda;
+                            dendaBaruDisplay = bill.details.denda;
                         }
 
-                        const totalDisplay = baseAmount + displayDenda + (bill.isPaid ? 0 : arrears);
+                        const totalDisplay = baseAmount + tunggakanDisplay + dendaBaruDisplay;
                         const innerBorderColor = bill.isPaid ? '#bbf7d0' : '#fecaca';
                         const innerBgColor = bill.isPaid ? '#f0fdf4' : '#fef2f2';
 
@@ -352,16 +355,16 @@ const BillsView = ({
                                             <span className="text-gray-500">Biaya Pakai</span>
                                             <span>{formatCurrency(bill.details.pakai)}</span>
                                         </div>
-                                        {displayDenda > 0 && (
+                                        {dendaBaruDisplay > 0 && (
                                             <div className="flex justify-between text-xs text-red-600 mb-1">
                                                 <span>Denda</span>
-                                                <span>{formatCurrency(displayDenda)}</span>
+                                                <span>{formatCurrency(dendaBaruDisplay)}</span>
                                             </div>
                                         )}
-                                        {!bill.isPaid && arrears > 0 && (
+                                        {!bill.isPaid && tunggakanDisplay > 0 && (
                                             <div className="flex justify-between text-xs text-red-600">
                                                 <span>Tunggakan</span>
-                                                <span>{formatCurrency(arrears)}</span>
+                                                <span>{formatCurrency(tunggakanDisplay)}</span>
                                             </div>
                                         )}
                                     </div>
@@ -475,6 +478,30 @@ const App = () => {
     const paidCount = monthBills.filter(b => b.isPaid).length;
     const unpaidCount = monthBills.filter(b => !b.isPaid).length;
 
+    // Fixed: Added Gemini AI analysis for financial summary.
+    const handleAISummary = async () => {
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const prompt = `Anda adalah asisten AI untuk pengelola PAMSIMAS Pungkuran Kwangsan. 
+            Berikan analisa singkat dalam Bahasa Indonesia mengenai data keuangan bulan ${currentMonth} ini:
+            - Total Pelanggan: ${totalCustomers}
+            - Sudah Bayar: ${paidCount}
+            - Belum Bayar: ${unpaidCount}
+            - Saldo Kas Akhir: ${formatCurrency(lifetimeBalance)}
+            - Total Penggunaan Air: ${usageThisMonth} m3
+            Berikan saran praktis untuk meningkatkan efisiensi penagihan atau penggunaan air.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+            });
+            alert("Analisa AI:\n\n" + response.text);
+        } catch (error) {
+            console.error("Gemini AI Error:", error);
+            alert("Maaf, gagal mendapatkan analisa AI.");
+        }
+    };
+
     const MenuCard = ({ title, value, icon, color, onClick, subtext }: any) => (
       <button onClick={onClick} className={`card p-4 flex flex-col items-center justify-center text-center ${onClick ? 'cursor-pointer hover:bg-gray-50 active:scale-95' : 'cursor-default'} border-0 shadow-sm h-full w-full relative overflow-hidden transition-transform transform`}>
         <div className={`absolute top-0 left-0 w-1 h-full`} style={{ backgroundColor: color }}></div>
@@ -500,6 +527,14 @@ const App = () => {
         </div>
         
         <div className="mt-4 flex flex-col items-center gap-3">
+             <button 
+                onClick={handleAISummary}
+                className="btn"
+                style={{backgroundColor: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: 'auto', padding: '0.6rem 2rem'}}
+            >
+                <span className="material-icons-round">psychology</span>
+                <span>Analisa AI</span>
+            </button>
              <button 
                 onClick={handleLogout}
                 className="bg-transparent border-0 flex items-center gap-1 cursor-pointer hover:opacity-80 p-2"
@@ -676,14 +711,41 @@ const App = () => {
     
     // Tentukan Tarif
     const tarifPerM3 = customer.type === 'Bisnis' ? TARIF_BISNIS : customer.type === 'Sosial' ? TARIF_SOSIAL : TARIF_UMUM;
-    
     const biayaPakai = usage * tarifPerM3;
-    const dendaAmount = 0; // Default saat pencatatan
     
-    const currentBillAmount = BIAYA_BEBAN + biayaPakai + dendaAmount;
-    const unpaidBills = bills.filter(b => b.customerId === customer.id && !b.isPaid);
-    const arrearsTotal = unpaidBills.reduce((acc, b) => acc + b.amount, 0);
-    const totalToPay = currentBillAmount + arrearsTotal;
+    // ANALOGI USER:
+    // 1. Ambil semua tagihan yang belum lunas
+    const unpaidBills = bills.filter(b => b.customerId === customer.id && !b.isPaid)
+                             .sort((a, b) => a.month.localeCompare(b.month));
+    
+    const currentMonthStr = getCurrentMonth();
+    
+    // LOGIKA PERHITUNGAN:
+    // - newestDenda: Denda untuk tagihan bulan lalu yang baru telat.
+    // - arrearsTotal: Semua Pokok dari bulan-bulan telat + Denda lama.
+    let arrearsTotal = 0;
+    let newestDenda = 0;
+
+    if (unpaidBills.length > 0) {
+        // Tagihan paling akhir yang telat (bulan kemarin)
+        const latestUnpaid = unpaidBills[unpaidBills.length - 1];
+        if (latestUnpaid.month < currentMonthStr && customer.type !== 'Sosial') {
+            newestDenda = BIAYA_DENDA;
+        }
+
+        // Semua Pokok yang telat
+        const totalPokokPast = unpaidBills.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
+        
+        // Denda dari tagihan-tagihan sebelum bulan kemarin (Denda Lama)
+        const dendaLama = (unpaidBills.length > 1 && customer.type !== 'Sosial') 
+                           ? (unpaidBills.length - 1) * BIAYA_DENDA 
+                           : 0;
+        
+        arrearsTotal = totalPokokPast + dendaLama;
+    }
+
+    const currentBillAmount = BIAYA_BEBAN + biayaPakai;
+    const totalToPay = currentBillAmount + arrearsTotal + newestDenda;
 
     const isValid = currReadingNum >= prevReading && currentReading !== '';
     const hasPhone = customer.phone && customer.phone.trim().length > 0;
@@ -699,7 +761,7 @@ const App = () => {
             currReading: currReadingNum,
             usage: usage,
             amount: currentBillAmount,
-            details: { beban: BIAYA_BEBAN, pakai: biayaPakai, denda: dendaAmount, tarifPerM3: tarifPerM3 },
+            details: { beban: BIAYA_BEBAN, pakai: biayaPakai, denda: 0, tarifPerM3: tarifPerM3 },
             isPaid: false,
             dateCreated: Date.now()
         };
@@ -718,15 +780,15 @@ const App = () => {
                 let message = `*PAMSIMAS PUNGKURAN*\n\n`;
                 message += `Kepada Pelanggan, *Bpk/Ibu ${customer.name.toUpperCase()}*\n\n`;
                 message += `Berikut rincian tagihan pemakaian air Anda:\n`;
-                message += `* Tipe : ${customer.type}\n`;
-                message += `* Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\n`;
-                message += `* Meteran Lama: ${padMeter(prevReading)}\n`;
-                message += `* Meteran Baru: ${padMeter(currReadingNum)}\n`;
-                message += `* Total Pemakaian: ${usage} m³\n\n`;
+                message += `• Tipe : ${customer.type}\n`;
+                message += `• Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}\n`;
+                message += `• Meteran Lama: ${padMeter(prevReading)}\n`;
+                message += `• Meteran Baru: ${padMeter(currReadingNum)}\n`;
+                message += `• Total Pemakaian: ${usage} m³\n\n`;
 
                 message += `Rincian Biaya:\n`;
                 message += `• Tunggakan: ${formatCurrency(arrearsTotal)}\n`;
-                message += `• Denda: ${formatCurrency(dendaAmount)}\n`;
+                message += `• Denda: ${formatCurrency(newestDenda)}\n`;
                 message += `• Biaya Beban: ${formatCurrency(BIAYA_BEBAN)}\n`;
                 if (tarifPerM3 > 0) {
                      message += `• Biaya Pakai: ${formatCurrency(biayaPakai)}\n`;
@@ -736,7 +798,7 @@ const App = () => {
                 }
 
                 message += `*TOTAL TAGIHAN: ${formatCurrency(totalToPay)}*\n\n`;
-                message += `_Lakukan pembayaran sebelum tanggal 10 untuk menghindari denda._\n\n`;
+                message += `_Lakukan pembayaran sebelum tanggal 10 for menghindari denda._\n\n`;
                 message += `_Terima kasih._`;
 
                 window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
@@ -783,16 +845,11 @@ const App = () => {
                 <div className="bg-gray-50 p-4 rounded border border-dashed border-gray-300 mb-6">
                     <div className="text-sm font-bold text-secondary uppercase mb-2 tracking-wider">Rincian Tagihan</div>
                     <div className="flex flex-col gap-1">
+                        <div className="flex justify-between text-sm"><span className="text-gray-600 font-bold">Tunggakan</span><span className="font-bold text-red-600">{formatCurrency(arrearsTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span className="text-gray-600 font-bold">Denda</span><span className="font-bold text-red-600">{formatCurrency(newestDenda)}</span></div>
+                        <div className="border-t border-gray-200 my-1"></div>
                         <div className="flex justify-between text-sm"><span className="text-gray-600">Biaya Beban</span><span className="font-medium">{formatCurrency(BIAYA_BEBAN)}</span></div>
                         <div className="flex justify-between text-sm"><span className="text-gray-600">Biaya Pakai&nbsp;<span className="text-xs text-gray-400">({usage} m³ x {formatCurrency(tarifPerM3)})</span></span><span className="font-medium">{formatCurrency(biayaPakai)}</span></div>
-                        <div className="flex justify-between text-sm text-red-600">
-                            <span>Denda</span>
-                            <span className="font-medium">{formatCurrency(0)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-red-600">
-                            <span>Tunggakan</span>
-                            <span className="font-medium">{formatCurrency(arrearsTotal)}</span>
-                        </div>
                     </div>
                     <div className="flex justify-between items-center border-t border-gray-300 pt-2 mt-2"><span className="font-bold text-lg text-gray-800">Total Tagihan</span><span className="font-bold text-xl text-primary">{formatCurrency(totalToPay)}</span></div>
                 </div>
@@ -835,43 +892,34 @@ const App = () => {
         // 3. Balance (Month)
         const balance = totalIncome - totalExpense;
 
-        // 4. Calculate Lifetime Balance (Total Saldo Akumulasi)
+        // 4. Calculate Lifetime Balance
         const totalBillIncomeLifetime = bills.filter(b => b.isPaid).reduce((acc, b) => acc + b.amount, 0);
         const totalManualIncomeLifetime = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
         const totalManualExpenseLifetime = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
         const lifetimeBalance = (totalBillIncomeLifetime + totalManualIncomeLifetime) - totalManualExpenseLifetime;
 
-        // Helper to format currency for CSV (e.g. "Rp 10.000")
         const fmt = (num: number) => `Rp ${new Intl.NumberFormat('id-ID').format(num)}`;
 
         let csvContent = "data:text/csv;charset=utf-8,";
-        
-        // HEADER
         csvContent += "LAPORAN KEUANGAN PAMSIMAS PUNGKURAN\n";
         csvContent += `Periode;${getMonthName(selectedMonth)}\n\n`;
 
-        // SECTION: PEMASUKAN
         csvContent += "PEMASUKAN\n";
-        // Item 1: Tagihan Air
         csvContent += `1. Total Tagihan Pelanggan;${fmt(waterIncome)}\n`;
-        // Item 2..n: Transaksi Manual Pemasukan
         incomeTxns.forEach((t, idx) => {
             csvContent += `${idx + 2}. ${t.description} (Manual);${fmt(t.amount)}\n`;
         });
         csvContent += `TOTAL PEMASUKAN;${fmt(totalIncome)}\n\n`;
 
-        // SECTION: PENGELUARAN
         csvContent += "PENGELUARAN\n";
         expenseTxns.forEach((t, idx) => {
             csvContent += `${idx + 1}. ${t.description};${fmt(t.amount)}\n`;
         });
         csvContent += `TOTAL PENGELUARAN;${fmt(totalExpense)}\n\n`;
 
-        // SECTION: SALDO
         csvContent += `SALDO PERIODE INI;${fmt(balance)}\n`;
         csvContent += `TOTAL SALDO (SEMUA PERIODE);${fmt(lifetimeBalance)}\n\n`;
         
-        // SECTION: TABLE DETAIL
         csvContent += "RINCIAN TAGIHAN PELANGGAN\n";
         csvContent += "No;Nama Pelanggan;Meteran Lama;Meteran Baru;Jumlah Tagihan;Denda;Tunggakan;Status\n";
 
@@ -883,25 +931,8 @@ const App = () => {
 
         sortedBillsForReport.forEach((b, index) => {
             const cust = customers.find(c => c.id === b.customerId);
-            const rawName = cust?.name || 'Unknown';
-            // Pastikan nama menggunakan Huruf Kapital di Awal Kata
-            const custName = toTitleCase(rawName);
-
-            const jumlahTagihanMurni = b.details.beban + b.details.pakai;
-            const denda = b.details.denda;
-            const tunggakan = !b.isPaid ? (jumlahTagihanMurni + denda) : 0;
-            const status = b.isPaid ? "Lunas" : "Belum Bayar";
-            
-            const row = [
-                index + 1, 
-                `"${custName}"`, 
-                b.prevReading, 
-                b.currReading, 
-                fmt(jumlahTagihanMurni), 
-                fmt(denda), 
-                fmt(tunggakan), 
-                status
-            ].join(";");
+            const custName = toTitleCase(cust?.name || 'Unknown');
+            const row = [index + 1, `"${custName}"`, b.prevReading, b.currReading, fmt(b.details.beban + b.details.pakai), fmt(b.details.denda), b.isPaid ? "Rp 0" : fmt(b.amount), b.isPaid ? "Lunas" : "Belum Bayar"].join(";");
             csvContent += row + "\n";
         });
 
@@ -1011,24 +1042,11 @@ const App = () => {
 
             {!showForm && (
                 <div className="mb-8 flex flex-col items-center mt-8" style={{ gap: '9px' }}>
-                    <button 
-                        onClick={() => setShowForm(true)} 
-                        className="btn shadow-sm" 
-                        style={{
-                            backgroundColor: '#10B981', 
-                            width: 'auto', 
-                            padding: '0.6rem 1.5rem',
-                            fontSize: '0.9rem'
-                        }}
-                    >
+                    <button onClick={() => setShowForm(true)} className="btn shadow-sm" style={{ backgroundColor: '#10B981', width: 'auto', padding: '0.6rem 1.5rem', fontSize: '0.9rem' }}>
                         <span className="material-icons-round" style={{fontSize: '1.2rem'}}>add</span>
                         Tambah Transaksi
                     </button>
-                    <button 
-                        onClick={handleDownloadReport} 
-                        className="bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
-                        style={{width: 'auto', color: '#0288D1'}}
-                    >
+                    <button onClick={handleDownloadReport} className="bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1 text-xs hover:opacity-80 transition-opacity" style={{width: 'auto', color: '#0288D1'}}>
                         <span className="material-icons-round" style={{fontSize: '16px'}}>download</span>
                         Download Laporan (CSV)
                     </button>
@@ -1047,15 +1065,7 @@ const App = () => {
                     </div>
                     <div className="input-group">
                         <label>Jenis Transaksi</label>
-                        <select 
-                            className="input-field bg-white" 
-                            value={type} 
-                            onChange={e => setType(e.target.value as 'in' | 'out')}
-                            style={{
-                                color: type === 'in' ? '#16a34a' : '#dc2626',
-                                fontWeight: 400
-                            }}
-                        >
+                        <select className="input-field bg-white" value={type} onChange={e => setType(e.target.value as 'in' | 'out')} style={{ color: type === 'in' ? '#16a34a' : '#dc2626', fontWeight: 400 }}>
                             <option value="in" style={{color: '#16a34a'}}>Pemasukan</option>
                             <option value="out" style={{color: '#dc2626'}}>Pengeluaran</option>
                         </select>
@@ -1071,16 +1081,13 @@ const App = () => {
             )}
 
             <h3 className="text-sm font-bold text-secondary uppercase mb-2">Riwayat Transaksi</h3>
-            
             <div className="flex flex-col gap-2 pb-6">
                 {paginatedTransactions.length === 0 ? <div className="text-center text-sm text-secondary py-4">Belum ada transaksi di bulan ini.</div> : 
                  paginatedTransactions.map((t, idx) => (
                     <div key={`${t.id}-${idx}`} className="bg-white p-3 rounded border border-gray-200 flex justify-between items-center shadow-sm">
                         <div style={{maxWidth: '65%'}}>
                             <div className="font-bold text-gray-800 text-sm">{toTitleCase(t.description)}</div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-secondary">{new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                            </div>
+                            <div className="text-xs text-secondary mt-1">{new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                         </div>
                         <div className="text-right">
                             <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
@@ -1105,7 +1112,6 @@ const App = () => {
                     </button>
                 </div>
             )}
-            {totalPages <= 1 && <div className="pb-20"></div>}
         </div>
     );
   };
@@ -1120,20 +1126,14 @@ const App = () => {
 
   return (
     <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-        {/* Header Fixed */}
         <header className="app-header" style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0px', paddingBottom: '1rem' }}>
             <div className="flex items-center gap-2 mb-1">
                  <div className="font-bold tracking-tight" style={{ fontSize: '18px', lineHeight: '1.2' }}>PAMSIMAS PUNGKURAN</div>
             </div>
-            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2', opacity: 1 }}>
-                KWANGSAN JUMAPOLO
-            </div>
-            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2', opacity: 1 }}>
-                KARANGANYAR
-            </div>
+            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2' }}>KWANGSAN JUMAPOLO</div>
+            <div className="font-bold" style={{ fontSize: '14px', lineHeight: '1.2' }}>KARANGANYAR</div>
         </header>
 
-        {/* Scrollable Content */}
         <div className="app-content">
             {view === 'dashboard' && <DashboardView />}
             {view === 'customers' && <CustomersView />}
@@ -1142,7 +1142,6 @@ const App = () => {
             {view === 'cashbook' && <CashBookView />}
         </div>
         
-        {/* Footer Fixed */}
         <footer className="app-footer">
             &copy; 2026 copyright pampunk
         </footer>

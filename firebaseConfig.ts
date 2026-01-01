@@ -1,5 +1,8 @@
-import firebase from "firebase/compat/app";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+
+// Use the modular Firebase SDK instead of the compat version to avoid export conflicts.
+// Fixed: Using scoped @firebase packages to ensure named exports are correctly resolved in this environment.
+import { initializeApp } from "@firebase/app";
+import { getFirestore, enableIndexedDbPersistence } from "@firebase/firestore";
 
 // --- KONFIGURASI FIREBASE ---
 const firebaseConfig = {
@@ -12,12 +15,11 @@ const firebaseConfig = {
   appId: "1:599593600366:web:df052764a2fdb4542d6d7f"
 };
 
-// Initialize Firebase
-// Use compat initialization to resolve 'initializeApp' export issues in some environments
-firebase.initializeApp(firebaseConfig);
+// Initialize Firebase modularly.
+const app = initializeApp(firebaseConfig);
 
-// Use getFirestore() to get the default Firestore instance
-const db = getFirestore();
+// Get the Firestore instance from the initialized app.
+const db = getFirestore(app);
 
 // Aktifkan Offline Persistence (Agar data tetap bisa dibaca saat internet mati)
 // Data akan disinkronkan kembali saat online.
