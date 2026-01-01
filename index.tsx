@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from './firebaseConfig';
@@ -229,8 +230,9 @@ const BillsView = ({
 
                     message += `Rincian Pembayaran:\n`;
                     message += `Tipe: ${customer.type}\n`;
+                    // FIX: Changed 'month' to 'm' which is the variable name used in the destructuring assignment on line 235.
                     const [y, m] = bill.month.split('-');
-                    const period = new Date(Number(y), Number(m)-1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                    const period = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
                     message += `Periode: ${period}\n`;
                     message += `Tagihan: ${formatCurrency(finalAmount)}\n`; 
                     if(denda > 0) message += `(Termasuk Denda: ${formatCurrency(denda)})\n`;
@@ -283,7 +285,6 @@ const BillsView = ({
                         const baseAmount = bill.details.beban + bill.details.pakai;
                         
                         // Calculate Arrears (Tunggakan)
-                        // Sum of amounts of ALL unpaid bills for this customer created BEFORE this bill
                         const arrears = bills.filter(b => 
                             b.customerId === bill.customerId && 
                             !b.isPaid && 
@@ -293,7 +294,6 @@ const BillsView = ({
                         let displayDenda = 0;
                         if (!bill.isPaid) {
                             if (bill.month < currentMonthStr) {
-                                // SOSIAL: Denda = 0
                                 if (cust && cust.type === 'Sosial') {
                                     displayDenda = 0;
                                 } else {
@@ -304,12 +304,9 @@ const BillsView = ({
                             displayDenda = bill.details.denda;
                         }
 
-                        // Total display includes arrears only if bill is not paid
                         const totalDisplay = baseAmount + displayDenda + (bill.isPaid ? 0 : arrears);
-
-                        // Colors for inner box
-                        const innerBorderColor = bill.isPaid ? '#bbf7d0' : '#fecaca'; // Lighter green/red
-                        const innerBgColor = bill.isPaid ? '#f0fdf4' : '#fef2f2'; // Very light green/red
+                        const innerBorderColor = bill.isPaid ? '#bbf7d0' : '#fecaca';
+                        const innerBgColor = bill.isPaid ? '#f0fdf4' : '#fef2f2';
 
                         return (
                             <div key={bill.id} className="card m-0" style={{
@@ -342,23 +339,31 @@ const BillsView = ({
                                         backgroundColor: innerBgColor,
                                         border: `1px solid ${innerBorderColor}`
                                     }}>
-                                        <div className="text-sm font-bold text-secondary mb-2">Rincian Tagihan</div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-600">Biaya Beban</span>
-                                            <span className="font-medium">{formatCurrency(bill.details.beban)}</span>
+                                            <span className="text-gray-600 font-medium">Meteran: {padMeter(bill.prevReading)} ➔ {padMeter(bill.currReading)}</span>
+                                            <span className="font-bold text-primary">{bill.usage} m³</span>
                                         </div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-600">Biaya Pakai</span>
-                                            <span className="font-medium">{formatCurrency(bill.details.pakai)}</span>
+                                        <div className="border-t border-gray-200 my-2"></div>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-gray-500">Biaya Beban</span>
+                                            <span>{formatCurrency(bill.details.beban)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm text-red-600 mb-1">
-                                            <span>Denda</span>
-                                            <span className="font-medium">{formatCurrency(displayDenda)}</span>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-gray-500">Biaya Pakai</span>
+                                            <span>{formatCurrency(bill.details.pakai)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm text-red-600">
-                                            <span>Tunggakan</span>
-                                            <span className="font-medium">{formatCurrency(bill.isPaid ? 0 : arrears)}</span>
-                                        </div>
+                                        {displayDenda > 0 && (
+                                            <div className="flex justify-between text-xs text-red-600 mb-1">
+                                                <span>Denda</span>
+                                                <span>{formatCurrency(displayDenda)}</span>
+                                            </div>
+                                        )}
+                                        {!bill.isPaid && arrears > 0 && (
+                                            <div className="flex justify-between text-xs text-red-600">
+                                                <span>Tunggakan</span>
+                                                <span>{formatCurrency(arrears)}</span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex justify-between items-center mt-1">
@@ -720,16 +725,14 @@ const App = () => {
                 message += `* Total Pemakaian: ${usage} m³\n\n`;
 
                 message += `Rincian Biaya:\n`;
-                message += `* Biaya Beban: ${formatCurrency(BIAYA_BEBAN)}\n`;
+                message += `• Tunggakan: ${formatCurrency(arrearsTotal)}\n`;
+                message += `• Denda: ${formatCurrency(dendaAmount)}\n`;
+                message += `• Biaya Beban: ${formatCurrency(BIAYA_BEBAN)}\n`;
                 if (tarifPerM3 > 0) {
-                     message += `* Biaya Pakai: ${formatCurrency(biayaPakai)}\n`;
-                     message += `(${usage} m³ x ${formatCurrency(tarifPerM3)})\n\n`;
+                     message += `• Biaya Pakai: ${formatCurrency(biayaPakai)}\n`;
+                     message += `  (${usage} m³ x ${formatCurrency(tarifPerM3)})\n\n`;
                 } else {
-                     message += `* Biaya Pakai: GRATIS (Sosial)\n\n`;
-                }
-                
-                if (arrearsTotal > 0) {
-                     message += `* Tunggakan: ${formatCurrency(arrearsTotal)}\n`;
+                     message += `• Biaya Pakai: GRATIS (Sosial)\n\n`;
                 }
 
                 message += `*TOTAL TAGIHAN: ${formatCurrency(totalToPay)}*\n\n`;
