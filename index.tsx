@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from './firebaseConfig';
@@ -10,7 +9,8 @@ import {
     onSnapshot, 
     query, 
     orderBy,
-    deleteDoc
+    deleteDoc,
+    deleteField
 } from '@firebase/firestore';
 
 // --- Types & Interfaces ---
@@ -41,6 +41,7 @@ interface Bill {
   isPaid: boolean;
   dateCreated: number;
   paidDate?: number;
+  paidVia?: string; // Menyimpan bulan tagihan yang melunasi tagihan ini (misal "2026-02")
 }
 
 interface Transaction {
@@ -67,6 +68,13 @@ const getMonthName = (yearMonth: string) => {
     const [year, month] = yearMonth.split('-');
     const date = new Date(Number(year), Number(month) - 1, 1);
     return date.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+};
+
+const getMonthAbbr = (yearMonth: string) => {
+    if (!yearMonth) return '';
+    const [year, month] = yearMonth.split('-');
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    return date.toLocaleString('id-ID', { month: 'short' });
 };
 
 const toTitleCase = (str: string) => {
@@ -188,57 +196,106 @@ const BillsView = ({
         const customer = customers.find(c => c.id === bill.customerId);
         
         try {
-            let finalAmount = bill.amount;
-            let denda = 0;
-
             if (isNowPaid) {
-                 const currentMonthStr = getCurrentMonth();
-                 if (bill.month < currentMonthStr) {
-                     if (customer && customer.type === 'Sosial') {
-                         denda = 0;
-                     } else {
-                         denda = BIAYA_DENDA;
-                     }
-                 } else {
-                     denda = 0;
-                 }
-                 finalAmount = bill.details.beban + bill.details.pakai + denda;
-            } else {
-                denda = 0;
-                finalAmount = bill.details.beban + bill.details.pakai;
-            }
+                // --- LOGIC PEMBAYARAN (LUNAS) ---
+                
+                // 1. Cari semua tunggakan sebelumnya
+                const previousUnpaid = bills.filter(b => 
+                    b.customerId === bill.customerId && 
+                    !b.isPaid && 
+                    b.month < bill.month
+                );
 
-            await updateDoc(doc(db, 'bills', billId), {
-                isPaid: isNowPaid, 
-                paidDate: isNowPaid ? Date.now() : null,
-                amount: finalAmount,
-                "details.denda": denda
-            });
+                let totalArrears = 0;
+                const updatePromises = [];
 
-            if (isNowPaid && customer) {
-                const hasPhone = customer.phone && customer.phone.trim().length > 0;
-                if (hasPhone) {
-                    let phoneNumber = customer.phone.replace(/\D/g, '');
-                    if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
-                    else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
+                // 2. Proses Tagihan Lama (Tunggakan)
+                for (const prevBill of previousUnpaid) {
+                    let dendaPrev = 0;
+                    // Terapkan denda pada tunggakan jika bukan sosial
+                    if (customer && customer.type !== 'Sosial') {
+                        dendaPrev = BIAYA_DENDA;
+                    }
+                    
+                    const billTotal = prevBill.details.beban + prevBill.details.pakai + dendaPrev;
+                    totalArrears += billTotal;
 
-                    let message = `*PAMSIMAS PUNGKURAN*\n\n`;
-                    message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
-                    message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
-
-                    message += `Rincian Pembayaran:\n`;
-                    message += `Tipe: ${customer.type}\n`;
-                    const [y, m] = bill.month.split('-');
-                    const period = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-                    message += `Periode: ${period}\n`;
-                    message += `Tagihan: ${formatCurrency(finalAmount)}\n`; 
-                    if(denda > 0) message += `(Termasuk Denda: ${formatCurrency(denda)})\n`;
-                    message += `Status: *LUNAS*\n\n`;
-                    message += `_Terima kasih._`;
-
-                    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
+                    // Tandai tagihan lama sebagai LUNAS
+                    // Amount TETAP ASLI, tapi ditandai paidVia bulan ini
+                    updatePromises.push(updateDoc(doc(db, 'bills', prevBill.id), {
+                        isPaid: true, 
+                        paidDate: Date.now(),
+                        amount: billTotal, 
+                        "details.denda": dendaPrev,
+                        paidVia: bill.month
+                    }));
                 }
+
+                // 3. Proses Tagihan Saat Ini
+                let dendaCurrent = 0;
+                const currentMonthStr = getCurrentMonth();
+                if (bill.month < currentMonthStr && customer?.type !== 'Sosial') {
+                    dendaCurrent = BIAYA_DENDA;
+                }
+
+                const currentBaseAmount = bill.details.beban + bill.details.pakai;
+                // Total yang masuk kas = Base Bulan Ini + Denda Bulan Ini + Total Tunggakan
+                const finalAmount = currentBaseAmount + dendaCurrent + totalArrears;
+
+                updatePromises.push(updateDoc(doc(db, 'bills', billId), {
+                    isPaid: true, 
+                    paidDate: Date.now(),
+                    amount: finalAmount,
+                    "details.denda": dendaCurrent
+                }));
+
+                await Promise.all(updatePromises);
+
+                // 4. Kirim WA
+                if (customer) {
+                    const hasPhone = customer.phone && customer.phone.trim().length > 0;
+                    if (hasPhone) {
+                        let phoneNumber = customer.phone.replace(/\D/g, '');
+                        if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.slice(1);
+                        else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
+
+                        let message = `*PAMSIMAS PUNGKURAN*\n\n`;
+                        message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
+                        message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
+
+                        message += `Rincian Pembayaran:\n`;
+                        message += `Tipe: ${customer.type}\n`;
+                        const [y, m] = bill.month.split('-');
+                        const period = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                        message += `Periode: ${period}\n`;
+                        
+                        // Breakdown
+                        if (totalArrears > 0) message += `Tunggakan Lalu: ${formatCurrency(totalArrears)}\n`;
+                        message += `Tagihan Bulan Ini: ${formatCurrency(currentBaseAmount + dendaCurrent)}\n`;
+                        
+                        message += `*TOTAL DIBAYAR: ${formatCurrency(finalAmount)}*\n`;
+                        message += `Status: *LUNAS*\n\n`;
+                        message += `_Terima kasih._`;
+
+                        window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
+                    }
+                }
+
+            } else {
+                // --- LOGIC PEMBATALAN (BELUM BAYAR) ---
+                
+                // Hanya reset tagihan yang diklik ini.
+                const normalAmount = bill.details.beban + bill.details.pakai; // Reset denda & tunggakan
+                
+                await updateDoc(doc(db, 'bills', billId), {
+                    isPaid: false, 
+                    paidDate: null,
+                    amount: normalAmount,
+                    "details.denda": 0,
+                    paidVia: deleteField() // Hapus marker paidVia jika ada
+                });
             }
+
         } catch (error) {
             console.error("Error updating bill:", error);
             alert("Gagal update status bayar.");
@@ -281,30 +338,38 @@ const BillsView = ({
                         const currentMonthStr = getCurrentMonth();
                         const baseAmount = bill.details.beban + bill.details.pakai;
                         
-                        const unpaidPrevious = bills.filter(b => 
-                            b.customerId === bill.customerId && 
-                            !b.isPaid && 
-                            b.dateCreated < bill.dateCreated
-                        ).sort((a, b) => a.month.localeCompare(b.month));
-                        
-                        const totalPokokPast = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
-                        const totalDendaPast = (unpaidPrevious.length > 1 && cust?.type !== 'Sosial') 
-                                                ? (unpaidPrevious.length - 1) * BIAYA_DENDA 
-                                                : 0;
-                        const tunggakanDisplay = totalPokokPast + totalDendaPast;
-
+                        let tunggakanDisplay = 0;
                         let dendaBaruDisplay = 0;
+
                         if (!bill.isPaid) {
+                             const unpaidPrevious = bills.filter(b => 
+                                b.customerId === bill.customerId && 
+                                !b.isPaid && 
+                                b.dateCreated < bill.dateCreated
+                            ).sort((a, b) => a.month.localeCompare(b.month));
+
+                            const totalPokokPast = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
+                            const totalDendaPast = (unpaidPrevious.length > 1 && cust?.type !== 'Sosial') 
+                                                    ? (unpaidPrevious.length - 1) * BIAYA_DENDA 
+                                                    : 0;
+                            tunggakanDisplay = totalPokokPast + totalDendaPast;
+
                             if (bill.month < currentMonthStr && cust?.type !== 'Sosial') {
                                 dendaBaruDisplay = BIAYA_DENDA;
                             }
                         } else {
+                            // Jika sudah lunas, gunakan data yang tersimpan di DB
                             dendaBaruDisplay = bill.details.denda;
                         }
 
-                        const totalDisplay = baseAmount + tunggakanDisplay + dendaBaruDisplay;
+                        // Jika isPaid, gunakan amount DB. Jika unpaid, hitung estimasi.
+                        const totalDisplay = bill.isPaid ? bill.amount : (baseAmount + tunggakanDisplay + dendaBaruDisplay);
+                        
                         const innerBorderColor = bill.isPaid ? '#bbf7d0' : '#fecaca';
                         const innerBgColor = bill.isPaid ? '#f0fdf4' : '#fef2f2';
+                        
+                        // Teks indikator jika dibayar lewat bulan lain
+                        const paidViaText = bill.isPaid && bill.paidVia ? `(Lunas Bln ${getMonthAbbr(bill.paidVia)})` : '';
 
                         return (
                             <div key={bill.id} className="card m-0" style={{
@@ -342,6 +407,7 @@ const BillsView = ({
                                             <span className="font-bold text-primary">{bill.usage} m³</span>
                                         </div>
                                         <div className="border-t border-gray-200 my-2"></div>
+                                        
                                         <div className="flex justify-between text-xs mb-1">
                                             <span className="text-gray-500">Biaya Beban</span>
                                             <span>{formatCurrency(bill.details.beban)}</span>
@@ -366,7 +432,10 @@ const BillsView = ({
 
                                     <div className="flex justify-between items-center mt-1">
                                         <span className="text-sm font-bold text-gray-800">Total Tagihan</span>
-                                        <span className="text-sm font-bold text-primary">{formatCurrency(totalDisplay)}</span>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-sm font-bold text-primary">{formatCurrency(totalDisplay)}</span>
+                                            {paidViaText && <span className="text-xs font-bold text-red-500">{paidViaText}</span>}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -457,7 +526,8 @@ const App = () => {
     };
   }, []);
 
-  const totalBillIncome = bills.filter(b => b.isPaid).reduce((acc, b) => acc + b.amount, 0);
+  // HITUNG TOTAL PENDAPATAN (Filter: Lunas DAN Tidak Dibayar Via Bulan Lain)
+  const totalBillIncome = bills.filter(b => b.isPaid && !b.paidVia).reduce((acc, b) => acc + b.amount, 0);
   const totalManualIncome = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
   const totalManualExpense = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
   const lifetimeBalance = (totalBillIncome + totalManualIncome) - totalManualExpense;
@@ -829,17 +899,22 @@ const App = () => {
     const handleDownloadReport = () => {
         const billsInMonth = bills.filter(b => b.month === selectedMonth);
         const transactionsInMonth = manualTransactions.filter(t => new Date(t.date).toISOString().slice(0, 7) === selectedMonth);
-        const waterIncome = billsInMonth.filter(b => b.isPaid).reduce((sum, b) => sum + b.amount, 0);
+        
+        // PENTING: Pemasukan dari tagihan air HANYA menghitung tagihan yang TIDAK dibayar via bulan lain
+        const waterIncome = billsInMonth.filter(b => b.isPaid && !b.paidVia).reduce((sum, b) => sum + b.amount, 0);
+        
         const incomeTxns = transactionsInMonth.filter(t => t.type === 'in');
         const manualIncomeTotal = incomeTxns.reduce((sum, t) => sum + t.amount, 0);
         const totalIncome = waterIncome + manualIncomeTotal;
         const expenseTxns = transactionsInMonth.filter(t => t.type === 'out');
         const totalExpense = expenseTxns.reduce((sum, t) => sum + t.amount, 0);
         const balance = totalIncome - totalExpense;
-        const totalBillIncomeLifetime = bills.filter(b => b.isPaid).reduce((acc, b) => acc + b.amount, 0);
+        
+        const totalBillIncomeLifetime = bills.filter(b => b.isPaid && !b.paidVia).reduce((acc, b) => acc + b.amount, 0);
         const totalManualIncomeLifetime = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
         const totalManualExpenseLifetime = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
         const lifetimeBalance = (totalBillIncomeLifetime + totalManualIncomeLifetime) - totalManualExpenseLifetime;
+        
         const fmt = (num: number) => `Rp ${new Intl.NumberFormat('id-ID').format(num)}`;
         let csvContent = "data:text/csv;charset=utf-8,";
         csvContent += "LAPORAN KEUANGAN PAMSIMAS PUNGKURAN\n";
@@ -863,7 +938,10 @@ const App = () => {
         sortedBillsForReport.forEach((b, index) => {
             const cust = customers.find(c => c.id === b.customerId);
             const custName = toTitleCase(cust?.name || 'Unknown');
-            const row = [index + 1, `"${custName}"`, b.prevReading, b.currReading, fmt(b.details.beban + b.details.pakai), fmt(b.details.denda), b.isPaid ? "Rp 0" : fmt(b.amount), b.isPaid ? "Lunas" : "Belum Bayar"].join(";");
+            let status = "Belum Bayar";
+            if (b.isPaid) status = b.paidVia ? `Lunas via ${getMonthAbbr(b.paidVia)}` : "Lunas";
+            
+            const row = [index + 1, `"${custName}"`, b.prevReading, b.currReading, fmt(b.details.beban + b.details.pakai), fmt(b.details.denda), (b.isPaid && !b.paidVia) ? "Rp 0" : fmt(b.amount), status].join(";");
             csvContent += row + "\n";
         });
         const encodedUri = encodeURI(csvContent);
@@ -909,7 +987,9 @@ const App = () => {
     };
 
     const manualTxns = manualTransactions.map(t => ({ ...t, source: 'manual', sortDate: t.date }));
-    const paidBillTxns = bills.filter(b => b.isPaid).map(b => {
+    
+    // Filter bill transactions: Hanya yang TIDAK dibayar via bulan lain
+    const paidBillTxns = bills.filter(b => b.isPaid && !b.paidVia).map(b => {
         const cust = customers.find(c => c.id === b.customerId);
         const name = cust?.name || 'Unknown';
         return {
