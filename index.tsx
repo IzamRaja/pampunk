@@ -197,9 +197,6 @@ const BillsView = ({
         
         try {
             if (isNowPaid) {
-                // --- LOGIC PEMBAYARAN (LUNAS) ---
-                
-                // 1. Cari semua tunggakan sebelumnya
                 const previousUnpaid = bills.filter(b => 
                     b.customerId === bill.customerId && 
                     !b.isPaid && 
@@ -209,10 +206,8 @@ const BillsView = ({
                 let totalArrears = 0;
                 const updatePromises = [];
 
-                // 2. Proses Tagihan Lama (Tunggakan)
                 for (const prevBill of previousUnpaid) {
                     let dendaPrev = 0;
-                    // Terapkan denda pada tunggakan jika bukan sosial
                     if (customer && customer.type !== 'Sosial') {
                         dendaPrev = BIAYA_DENDA;
                     }
@@ -220,8 +215,6 @@ const BillsView = ({
                     const billTotal = prevBill.details.beban + prevBill.details.pakai + dendaPrev;
                     totalArrears += billTotal;
 
-                    // Tandai tagihan lama sebagai LUNAS
-                    // Amount TETAP ASLI, tapi ditandai paidVia bulan ini
                     updatePromises.push(updateDoc(doc(db, 'bills', prevBill.id), {
                         isPaid: true, 
                         paidDate: Date.now(),
@@ -231,7 +224,6 @@ const BillsView = ({
                     }));
                 }
 
-                // 3. Proses Tagihan Saat Ini
                 let dendaCurrent = 0;
                 const currentMonthStr = getCurrentMonth();
                 if (bill.month < currentMonthStr && customer?.type !== 'Sosial') {
@@ -239,7 +231,6 @@ const BillsView = ({
                 }
 
                 const currentBaseAmount = bill.details.beban + bill.details.pakai;
-                // Total yang masuk kas = Base Bulan Ini + Denda Bulan Ini + Total Tunggakan
                 const finalAmount = currentBaseAmount + dendaCurrent + totalArrears;
 
                 updatePromises.push(updateDoc(doc(db, 'bills', billId), {
@@ -251,7 +242,6 @@ const BillsView = ({
 
                 await Promise.all(updatePromises);
 
-                // 4. Kirim WA
                 if (customer) {
                     const hasPhone = customer.phone && customer.phone.trim().length > 0;
                     if (hasPhone) {
@@ -260,7 +250,7 @@ const BillsView = ({
                         else if (!phoneNumber.startsWith('62') && phoneNumber.length > 5) phoneNumber = '62' + phoneNumber;
 
                         let message = `*PAMSIMAS PUNGKURAN*\n\n`;
-                        message += `Terima kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
+                        message += `Terika kasih *Bpk/Ibu ${customer.name.toUpperCase()}*.\n`;
                         message += `Pembayaran TAGIHAN PAMSIMAS Anda telah diterima.\n\n`;
 
                         message += `Rincian Pembayaran:\n`;
@@ -269,7 +259,6 @@ const BillsView = ({
                         const period = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
                         message += `Periode: ${period}\n`;
                         
-                        // Breakdown
                         if (totalArrears > 0) message += `Tunggakan Lalu: ${formatCurrency(totalArrears)}\n`;
                         message += `Tagihan Bulan Ini: ${formatCurrency(currentBaseAmount + dendaCurrent)}\n`;
                         
@@ -282,17 +271,13 @@ const BillsView = ({
                 }
 
             } else {
-                // --- LOGIC PEMBATALAN (BELUM BAYAR) ---
-                
-                // Hanya reset tagihan yang diklik ini.
-                const normalAmount = bill.details.beban + bill.details.pakai; // Reset denda & tunggakan
-                
+                const normalAmount = bill.details.beban + bill.details.pakai;
                 await updateDoc(doc(db, 'bills', billId), {
                     isPaid: false, 
                     paidDate: null,
                     amount: normalAmount,
                     "details.denda": 0,
-                    paidVia: deleteField() // Hapus marker paidVia jika ada
+                    paidVia: deleteField()
                 });
             }
 
@@ -338,37 +323,40 @@ const BillsView = ({
                         const currentMonthStr = getCurrentMonth();
                         const baseAmount = bill.details.beban + bill.details.pakai;
                         
-                        let tunggakanDisplay = 0;
-                        let dendaBaruDisplay = 0;
+                        let tunggakanPokokDisplay = 0;
+                        let dendaTotalDisplay = 0;
 
                         if (!bill.isPaid) {
                              const unpaidPrevious = bills.filter(b => 
                                 b.customerId === bill.customerId && 
                                 !b.isPaid && 
-                                b.dateCreated < bill.dateCreated
+                                b.month < bill.month
                             ).sort((a, b) => a.month.localeCompare(b.month));
 
-                            const totalPokokPast = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
-                            const totalDendaPast = (unpaidPrevious.length > 1 && cust?.type !== 'Sosial') 
-                                                    ? (unpaidPrevious.length - 1) * BIAYA_DENDA 
+                            // Tunggakan hanyalah pokok (Beban + Pakai) dari bulan-bulan sebelumnya
+                            tunggakanPokokDisplay = unpaidPrevious.reduce((sum, b) => sum + (b.details.beban + b.details.pakai), 0);
+                            
+                            // Denda adalah akumulasi denda lama + denda bulan ini (jika telat)
+                            const dendaLama = (unpaidPrevious.length > 0 && cust?.type !== 'Sosial') 
+                                                    ? (unpaidPrevious.length * BIAYA_DENDA) 
                                                     : 0;
-                            tunggakanDisplay = totalPokokPast + totalDendaPast;
-
+                            
+                            let dendaBaru = 0;
                             if (bill.month < currentMonthStr && cust?.type !== 'Sosial') {
-                                dendaBaruDisplay = BIAYA_DENDA;
+                                dendaBaru = BIAYA_DENDA;
                             }
+                            dendaTotalDisplay = dendaLama + dendaBaru;
                         } else {
-                            // Jika sudah lunas, gunakan data yang tersimpan di DB
-                            dendaBaruDisplay = bill.details.denda;
+                            // Jika lunas, kita tidak punya rincian tunggakan real-time, 
+                            // denda diambil dari data yang tersimpan di DB
+                            dendaTotalDisplay = bill.details.denda;
                         }
 
-                        // Jika isPaid, gunakan amount DB. Jika unpaid, hitung estimasi.
-                        const totalDisplay = bill.isPaid ? bill.amount : (baseAmount + tunggakanDisplay + dendaBaruDisplay);
+                        // Total Display tetap sesuai status pembayaran
+                        const totalDisplay = bill.isPaid ? bill.amount : (baseAmount + tunggakanPokokDisplay + dendaTotalDisplay);
                         
                         const innerBorderColor = bill.isPaid ? '#bbf7d0' : '#fecaca';
                         const innerBgColor = bill.isPaid ? '#f0fdf4' : '#fef2f2';
-                        
-                        // Teks indikator jika dibayar lewat bulan lain
                         const paidViaText = bill.isPaid && bill.paidVia ? `(Lunas Bln ${getMonthAbbr(bill.paidVia)})` : '';
 
                         return (
@@ -416,18 +404,19 @@ const BillsView = ({
                                             <span className="text-gray-500">Biaya Pakai</span>
                                             <span>{formatCurrency(bill.details.pakai)}</span>
                                         </div>
-                                        {dendaBaruDisplay > 0 && (
+                                        
+                                        {!bill.isPaid && tunggakanPokokDisplay > 0 && (
                                             <div className="flex justify-between text-xs text-red-600 mb-1">
-                                                <span>Denda</span>
-                                                <span>{formatCurrency(dendaBaruDisplay)}</span>
-                                            </div>
-                                        )}
-                                        {!bill.isPaid && tunggakanDisplay > 0 && (
-                                            <div className="flex justify-between text-xs text-red-600">
                                                 <span>Tunggakan</span>
-                                                <span>{formatCurrency(tunggakanDisplay)}</span>
+                                                <span>{formatCurrency(tunggakanPokokDisplay)}</span>
                                             </div>
                                         )}
+                                        
+                                        {/* Rincian Denda sesuai permintaan: Rp 0 jika tidak menunggak, dan Rp 5000 dst jika menunggak */}
+                                        <div className="flex justify-between text-xs text-red-600">
+                                            <span>Denda</span>
+                                            <span>{formatCurrency(dendaTotalDisplay)}</span>
+                                        </div>
                                     </div>
 
                                     <div className="flex justify-between items-center mt-1">
@@ -899,17 +888,13 @@ const App = () => {
     const handleDownloadReport = () => {
         const billsInMonth = bills.filter(b => b.month === selectedMonth);
         const transactionsInMonth = manualTransactions.filter(t => new Date(t.date).toISOString().slice(0, 7) === selectedMonth);
-        
-        // PENTING: Pemasukan dari tagihan air HANYA menghitung tagihan yang TIDAK dibayar via bulan lain
         const waterIncome = billsInMonth.filter(b => b.isPaid && !b.paidVia).reduce((sum, b) => sum + b.amount, 0);
-        
         const incomeTxns = transactionsInMonth.filter(t => t.type === 'in');
         const manualIncomeTotal = incomeTxns.reduce((sum, t) => sum + t.amount, 0);
         const totalIncome = waterIncome + manualIncomeTotal;
         const expenseTxns = transactionsInMonth.filter(t => t.type === 'out');
         const totalExpense = expenseTxns.reduce((sum, t) => sum + t.amount, 0);
         const balance = totalIncome - totalExpense;
-        
         const totalBillIncomeLifetime = bills.filter(b => b.isPaid && !b.paidVia).reduce((acc, b) => acc + b.amount, 0);
         const totalManualIncomeLifetime = manualTransactions.filter(t => t.type === 'in').reduce((acc, t) => acc + t.amount, 0);
         const totalManualExpenseLifetime = manualTransactions.filter(t => t.type === 'out').reduce((acc, t) => acc + t.amount, 0);
@@ -940,7 +925,6 @@ const App = () => {
             const custName = toTitleCase(cust?.name || 'Unknown');
             let status = "Belum Bayar";
             if (b.isPaid) status = b.paidVia ? `Lunas via ${getMonthAbbr(b.paidVia)}` : "Lunas";
-            
             const row = [index + 1, `"${custName}"`, b.prevReading, b.currReading, fmt(b.details.beban + b.details.pakai), fmt(b.details.denda), (b.isPaid && !b.paidVia) ? "Rp 0" : fmt(b.amount), status].join(";");
             csvContent += row + "\n";
         });
@@ -988,39 +972,54 @@ const App = () => {
 
     const manualTxns = manualTransactions.map(t => ({ ...t, source: 'manual', sortDate: t.date }));
     
-    // Filter bill transactions: Hanya yang TIDAK dibayar via bulan lain
-    const paidBillTxns = bills.filter(b => b.isPaid && !b.paidVia).map(b => {
+    // PEMBAGIAN LOGIKA TRANSAKSI TAGIHAN AIR
+    const paidBillTxns = bills.filter(b => b.isPaid).map(b => {
         const cust = customers.find(c => c.id === b.customerId);
         const name = cust?.name || 'Unknown';
+        
+        // JIKA TAGIHAN INI DIBAYAR LEWAT BULAN LAIN (TUNGGAKAN)
+        // MAKA NOMINAL DI RIWAYAT BULAN ASAL ADALAH 0 (AUDIT TRAIL)
+        const displayAmount = b.paidVia ? 0 : b.amount;
+        const note = b.paidVia ? ` (Lunas pada bulan ${getMonthAbbr(b.paidVia)})` : '';
+
         return {
             id: b.id,
             type: 'in' as 'in',
-            description: `Tagihan ${toTitleCase(name)}`,
-            amount: b.amount,
+            description: `Tagihan ${toTitleCase(name)}${note}`,
+            amount: displayAmount,
             date: b.paidDate || b.dateCreated,
             sortDate: b.paidDate || b.dateCreated,
+            monthLabel: b.month, // Untuk filter berdasarkan bulan asal tagihan
             isManual: false,
             source: 'bill'
         };
     });
 
     let displayTransactions: any[] = [];
+    // Kita memfilter riwayat berdasarkan BULAN ASAL tagihan untuk audit yang konsisten
+    const filterByMonth = (t: any) => {
+        if (t.source === 'bill') return t.monthLabel === selectedMonth;
+        return new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth;
+    };
+
     if (activeDetailType === 'in') {
-        const manualIn = manualTxns.filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth);
-        const billInTotal = paidBillTxns.filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
-        displayTransactions = [...manualIn];
-        if (billInTotal > 0) {
-            displayTransactions.push({ id: 'aggregated-bills', type: 'in', description: 'Total Tagihan Air', amount: billInTotal, sortDate: Date.now(), isManual: false, source: 'aggregated' });
-        }
+        const manualIn = manualTxns.filter(t => t.type === 'in' && filterByMonth(t));
+        // Hanya yang benar-benar menambah kas yang dihitung di ringkasan angka atas
+        const billInActual = paidBillTxns.filter(t => filterByMonth(t) && t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+        // Namun di list bawah, kita tetap tunjukkan yang Rp 0 sebagai audit
+        const billInAudit = paidBillTxns.filter(t => filterByMonth(t));
+        
+        displayTransactions = [...manualIn, ...billInAudit];
         displayTransactions.sort((a, b) => b.sortDate - a.sortDate);
     } else if (activeDetailType === 'out') {
-        displayTransactions = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).sort((a, b) => b.sortDate - a.sortDate);
+        displayTransactions = manualTxns.filter(t => t.type === 'out' && filterByMonth(t)).sort((a, b) => b.sortDate - a.sortDate);
     } else {
-        displayTransactions = [...manualTxns, ...paidBillTxns].filter(t => new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).sort((a, b) => b.sortDate - a.sortDate);
+        displayTransactions = [...manualTxns, ...paidBillTxns].filter(t => filterByMonth(t)).sort((a, b) => b.sortDate - a.sortDate);
     }
 
-    const totalInMonth = [...manualTxns, ...paidBillTxns].filter(t => t.type === 'in' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
-    const totalOutMonth = manualTxns.filter(t => t.type === 'out' && new Date(t.sortDate).toISOString().slice(0, 7) === selectedMonth).reduce((sum, t) => sum + t.amount, 0);
+    // Angka Ringkasan Kas (Hanya yang benar-benar menambah/mengurangi uang fisik)
+    const totalInMonth = [...manualTxns, ...paidBillTxns].filter(t => t.type === 'in' && filterByMonth(t)).reduce((sum, t) => sum + t.amount, 0);
+    const totalOutMonth = manualTxns.filter(t => t.type === 'out' && filterByMonth(t)).reduce((sum, t) => sum + t.amount, 0);
     const balanceMonth = totalInMonth - totalOutMonth;
 
     const totalPages = Math.ceil(displayTransactions.length / itemsPerPage);
@@ -1053,7 +1052,7 @@ const App = () => {
                     <div className="text-red-600 font-bold text-lg">{formatCurrency(totalOutMonth)}</div>
                 </div>
                 <div className="p-4 rounded flex justify-between items-center shadow-sm" style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}>
-                    <div className="text-blue-800 font-bold text-lg">Saldo Bulan Ini</div>
+                    <div className="text-blue-800 font-bold text-lg">Saldo Kas Bulan Ini</div>
                     <div className="text-blue-800 font-bold text-lg">{formatCurrency(balanceMonth)}</div>
                 </div>
             </div>
@@ -1114,16 +1113,17 @@ const App = () => {
                         <div style={{maxWidth: '65%'}}>
                             <div className="font-bold text-gray-800 text-sm">{toTitleCase(t.description)}</div>
                             <div className="text-xs text-secondary mt-1">
-                                {t.id === 'aggregated-bills' ? 'Total bulan ini' : new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {new Date(t.sortDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </div>
                         </div>
                         <div className="text-right">
-                            <div className={`font-bold ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
-                                {t.type === 'in' ? '+' : '-'} {formatCurrency(t.amount)}
+                            <div className={`font-bold ${t.amount === 0 ? 'text-gray-400' : t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                                {t.amount === 0 ? '' : (t.type === 'in' ? '+' : '-')} {formatCurrency(t.amount)}
                             </div>
                             {t.isManual && (
                                 <button onClick={() => handleDeleteTransaction(t.id, t.isManual)} className="text-xs text-red-400 mt-1 bg-transparent border-0 p-0 cursor-pointer">Hapus</button>
                             )}
+                            {t.amount === 0 && <div className="text-xs text-red-500 font-bold mt-1">Audit Trail</div>}
                         </div>
                     </div>
                  ))}
